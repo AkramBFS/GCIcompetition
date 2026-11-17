@@ -1,0 +1,64 @@
+=== GCI Home Credit Data Audit (2026-11-17T19:57:53.746308+00:00) ===
+Train shape: (171202, 34)
+Test shape:  (61500, 33)
+Sample sub:  (61500, 2)
+Target positive rate: 0.080729 (13821 positives / 171202 rows)
+SK_ID_CURR overlap=0, train_id_dups=0, test_id_dups=0
+Exact feature duplicates: train=0 (conflicting_target_groups=0), test=0, train_test_exact_overlap=0
+Same-person key ['CODE_GENDER', 'DAYS_BIRTH', 'DAYS_ID_PUBLISH', 'DAYS_REGISTRATION', 'NAME_EDUCATION_TYPE']: within-train rate=0.00235, test-to-train hit rate=0.00203
+Fold strategy decision: StratifiedKFold (n_splits=5, random_state=42)
+Loaded existing fixed folds from C:\Users\akram\Desktop\GCIcomp\experiments\folds.npy
+Fold sizes: [34241, 34241, 34240, 34240, 34240]
+Fold default rates: [0.080722, 0.080751, 0.080724, 0.080724, 0.080724]
+Max fold default rate spread: 0.000029
+
+--- Univariate Feature AUCs (train non-missing) ---
+  NAME_CONTRACT_TYPE            : 0.51548
+  CODE_GENDER                   : 0.54509
+  CNT_CHILDREN                  : 0.51673
+  AMT_INCOME_TOTAL              : 0.51817
+  AMT_CREDIT                    : 0.52122
+  AMT_ANNUITY                   : 0.50234
+  AMT_GOODS_PRICE               : 0.53587
+  NAME_INCOME_TYPE              : 0.55732
+  NAME_EDUCATION_TYPE           : 0.54306
+  NAME_FAMILY_STATUS            : 0.53289
+  NAME_HOUSING_TYPE             : 0.51756
+  REGION_POPULATION_RELATIVE    : 0.53502
+  DAYS_BIRTH                    : 0.58438
+  DAYS_EMPLOYED                 : 0.52557
+  DAYS_REGISTRATION             : 0.54265
+  DAYS_ID_PUBLISH               : 0.55678
+  OWN_CAR_AGE                   : 0.55947
+  FLAG_MOBIL                    : 0.50000
+  FLAG_EMP_PHONE                : 0.53222
+  FLAG_WORK_PHONE               : 0.52135
+  OCCUPATION_TYPE               : 0.57460
+  CNT_FAM_MEMBERS               : 0.50625
+  REGION_RATING_CLIENT          : 0.54808
+  ORGANIZATION_TYPE             : 0.56821
+  EXT_SOURCE_1                  : 0.66470
+  EXT_SOURCE_2                  : 0.65821
+  EXT_SOURCE_3                  : 0.67957
+  DAYS_LAST_PHONE_CHANGE        : 0.55652
+  AMT_REQ_CREDIT_BUREAU_HOUR    : 0.50014
+  AMT_REQ_CREDIT_BUREAU_MON     : 0.50600
+  AMT_REQ_CREDIT_BUREAU_QRT     : 0.50704
+  AMT_REQ_CREDIT_BUREAU_YEAR    : 0.52052
+
+--- Adversarial Validation (Train vs Test) ---
+Adversarial 5-fold LightGBM AUC: 0.51673
+Top adversarial features (gain):
+  ORGANIZATION_TYPE             : 6752.17
+  EXT_SOURCE_2                  : 2199.71
+  EXT_SOURCE_3                  : 2155.57
+  OCCUPATION_TYPE               : 1578.19
+  DAYS_EMPLOYED                 : 1056.81
+  DAYS_REGISTRATION             : 1036.04
+  EXT_SOURCE_1                  : 1019.78
+  DAYS_ID_PUBLISH               : 955.28
+  AMT_CREDIT                    : 776.74
+  DAYS_BIRTH                    : 758.60
+
+--- Red Flag Summary ---
+NONE: All audit checks passed with zero red flags.
