@@ -134,6 +134,7 @@ def run_cv(
     fold_aucs: list[float] = []
     best_iters: list[int] = []
     fold_importances: dict[str, np.ndarray] = {}
+    imp_feature_names: list[str] = list(X.columns)
 
     for fold_id in unique_folds:
         va_mask = folds == fold_id
@@ -154,7 +155,9 @@ def run_cv(
         best_iters.append(int(best_iter))
 
         imp = getattr(fit_predict, "last_feature_importances_", None)
-        if imp is not None and len(imp) == X.shape[1]:
+        fnames = getattr(fit_predict, "last_feature_names_", list(X.columns))
+        if imp is not None and len(imp) == len(fnames):
+            imp_feature_names = list(fnames)
             fold_importances[f"fold_{fold_id}"] = np.asarray(imp, dtype=np.float64)
 
         print(
@@ -172,7 +175,7 @@ def run_cv(
     np.save(exp_path / "test.npy", test_preds)
 
     if len(fold_importances) == len(unique_folds):
-        imp_df = pd.DataFrame({"feature": list(X.columns)})
+        imp_df = pd.DataFrame({"feature": imp_feature_names})
         for k, vals in fold_importances.items():
             imp_df[k] = vals
         fold_cols = [f"fold_{fid}" for fid in unique_folds]

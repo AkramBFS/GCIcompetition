@@ -565,6 +565,7 @@ def wrap_fit_predict_with_te(
         imp = getattr(base_fit_predict, "last_feature_importances_", None)
         if imp is not None:
             fit_predict.last_feature_importances_ = imp  # type: ignore[attr-defined]
+            fit_predict.last_feature_names_ = list(tr_te.columns)  # type: ignore[attr-defined]
         return val_pred, test_pred, best_iter
 
     return fit_predict

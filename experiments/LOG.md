@@ -83,3 +83,8 @@ Deadline: **2026-11-20 01:00:00 UTC**
   - Mean Fold AUC: **`0.761389`** (`+0.001273` vs `lgb_f2`) | Pooled OOF AUC: **`0.761348`**
   - Folds improved: `4/5` -> **KEEP** (new incumbent: `lgb_f2_f5`, active families: `["F2", "F5"]`).
 - **Hypothesis (`lgb_f2_f5_f6` — F6 Nested Target Encoding):** Adding fold-isolated 5-fold inner-OOF smoothed target encodings (`alpha=50`) for `ORGANIZATION_TYPE` and `OCCUPATION_TYPE` (`47` features total) provides smoothed numeric risk priors for the 58-category `ORGANIZATION_TYPE` and 19-category `OCCUPATION_TYPE`. Expected effect: `+0.0002` to `+0.0006` mean AUC (`>= 4/5` folds).
+- **Result (`lgb_f2_f5_f6`, 47 effective features):**
+  - Fold AUCs: `[0.759344, 0.762811, 0.765261, 0.759736, 0.762068]` (mean best iter `367.4`)
+  - Mean Fold AUC: **`0.761844`** (`+0.000455` vs `lgb_f2_f5`) | Pooled OOF AUC: **`0.761783`**
+  - Folds improved: `4/5` -> **KEEP** (new incumbent: `lgb_f2_f5_f6`, active families: `["F2", "F5", "F6"]`).
+- **Hypothesis (`lgb_f2_f5_f6_f1core` — Compact Core F1 on `F2+F5+F6`):** Earlier full `F1` (18 columns) diluted `feature_fraction=0.35`. Keeping only the 6 core F1 summaries (`EXT_MEAN`, `EXT_STD`, `EXT_PROD`, `EXT_NMISS`, `EXT_WMEAN`, `EXT_MEAN_X_CREDIT_TERM`) on top of `F2+F5+F6` (`51` effective features) should capture cross-bureau agreement/interaction without feature dilution. Expected effect: `+0.0005` to `+0.0020` mean AUC (`>= 4/5` folds).
