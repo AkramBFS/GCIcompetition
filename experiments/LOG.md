@@ -157,3 +157,16 @@ Deadline: **2026-11-20 01:00:00 UTC**
 
 ### P7: Diversity Model (`lgb_diverse_et`)
 - **Hypothesis (`lgb_diverse_et`):** Training an `extra_trees=True` LightGBM (`num_leaves=18`, `max_depth=5`, `min_data_in_leaf=150`, `feature_fraction=0.28`, `bagging_fraction=0.8`, `lambda_l1=3.0`, `lambda_l2=5.0`, `lr=0.02`, deterministic) uses randomized split thresholds rather than greedy exact splits, reducing correlation with GBDTs. Keep in the final blend only if adding it to `(lgb_tuned_lr02, xgb_frozen_codes, cat_frozen)` improves pooled OOF AUC by `>= +0.0003`.
+- **Blend Check Baseline (P6 3-model equal rank blend):** `0.764937` pooled OOF AUC (`+0.001447` over single best `lgb_tuned_lr02`).
+- **Result (`lgb_diverse_et`, 46 effective features, `lr=0.02`, deterministic):**
+  - Fold AUCs: `[0.755754, 0.759851, 0.763543, 0.756226, 0.759504]` (mean best iter `2477.6`)
+  - Mean Fold AUC: `0.758976` | Pooled OOF AUC: `0.758940`
+  - Blend impact: 4-model equal blend `0.764423` (`-0.000514`); optimal `w_et` over `[0.05..0.25]` was `0.0` (`+0.000000`).
+  - Decision: **REJECT** from final blend (`< +0.0003` threshold).
+- **Gate P7:** PASSED.
+
+---
+
+### P8: Multi-Seed Runs and Rank Blend (46 effective features)
+- **Start UTC:** `2026-11-17T22:30:18Z`
+- **Hypothesis (`multi-seed`):** Averaging ranks across multiple random seeds within each diverse GBDT family (LightGBM tuned seeds `42, 1024, 2025`; XGBoost codes seeds `42, 1024`; CatBoost seeds `42, 1024`) reduces model-seed variance before combining families via `rank_blend` (`+0.0002` to `+0.0005` over 3 single-seed models `0.764937`).
