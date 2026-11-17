@@ -48,3 +48,18 @@ Deadline: **2026-11-20 01:00:00 UTC**
 
 ### P3: Feature Families (EXP_LR = 0.06, Incumbent starts at `lgb_raw`)
 - **Hypothesis (`lgb_f0` — F0 Cleaning & Flags):** Adding `NAN_COUNT`, `DAYS_EMPLOYED_ANOM` (and replacing `365243 -> NaN`), `OWN_CAR_AGE_ANOM` (and replacing `>=60 -> NaN`), `BUREAU_MISSING`, and replacing `"XNA"`/`"Unknown"` placeholders with `NaN` cleanly separates anomaly regimes from true distributions. Expected effect: `+0.0003` to `+0.0010` mean AUC gain.
+- **Result (`lgb_f0`, 36 features, skipped `AMT_REQ_CREDIT_BUREAU_DAY`, `AMT_REQ_CREDIT_BUREAU_WEEK`):**
+  - Fold AUCs: `[0.748127, 0.751286, 0.756947, 0.746941, 0.754440]` (mean best iter `339.6`)
+  - Mean Fold AUC: `0.751548` (`+0.000186` vs `lgb_raw`) | Pooled OOF AUC: `0.751449`
+  - Folds improved: `3/5` -> **REJECT** (below `+0.0002` and `< 4/5` folds; incumbent stays `lgb_raw`; downstream F1–F4 clean placeholders internally via private helpers).
+- **Hypothesis (`lgb_f1` — F1 External Scores):** Adding `EXT_MEAN`, `EXT_STD`, `EXT_MIN`, `EXT_MAX`, `EXT_MEDIAN`, `EXT_PROD`, `EXT_NMISS`, `EXT_WMEAN`, pairwise products/diffs, `EXT_k_DIV_AGE`, and `EXT_MEAN_X_CREDIT_TERM` captures the strongest credit-bureau signal interactions before any imputation. Expected effect: `+0.003` to `+0.006` mean AUC gain (`5/5` folds).
+- **Result (`lgb_f1`, 50 features):**
+  - Fold AUCs: `[0.747501, 0.752495, 0.757140, 0.748304, 0.752002]` (mean best iter `320.0`)
+  - Mean Fold AUC: `0.751488` (`+0.000126` vs `lgb_raw`) | Pooled OOF AUC: `0.751443`
+  - Folds improved: `3/5` -> **REJECT** (adding 18 correlated EXT columns diluted `feature_fraction=0.35` and failed `mean>=+0.0002`, `folds>=4`; incumbent stays `lgb_raw`).
+- **Hypothesis (`lgb_f2` — F2 Affordability Ratios):** Adding `CREDIT_TERM`, `ANNUITY_INCOME_RATIO`, `CREDIT_INCOME_RATIO`, `CREDIT_GOODS_RATIO`, `GOODS_INCOME_RATIO`, `CREDIT_MINUS_GOODS`, `INCOME_PER_PERSON`, `INCOME_PER_CHILD`, `ANNUITY_PER_PERSON`, and `INCOME_MINUS_ANNUITY` supplies nonlinear debt-to-income and loan-to-value ratios that axis-aligned trees cannot easily approximate from raw columns. Expected effect: `+0.003` to `+0.008` mean AUC gain (`5/5` folds).
+- **Result (`lgb_f2`, 42 features):**
+  - Fold AUCs: `[0.757543, 0.760985, 0.764673, 0.755538, 0.761844]` (mean best iter `356.4`)
+  - Mean Fold AUC: **`0.760117`** (`+0.008755` vs `lgb_raw`) | Pooled OOF AUC: **`0.760110`**
+  - Folds improved: `5/5` -> **KEEP** (new incumbent: `lgb_f2`, active families: `["F2"]`).
+- **Hypothesis (`lgb_f2_f3` — F3 Age & Temporal Ratios):** Adding `AGE_YEARS`, `EMPLOYED_TO_AGE`, `REGISTRATION_TO_AGE`, `ID_PUBLISH_TO_AGE`, `CAR_AGE_TO_AGE`, `PHONE_CHANGE_TO_AGE`, `PHONE_CHANGE_TO_EMPLOYED`, and `AGE_AT_LAST_PAYMENT` captures career/document/phone stability relative to age and retirement-horizon loan maturity (`AGE_AT_LAST_PAYMENT`). Expected effect: `+0.0005` to `+0.0020` mean AUC gain (`5/5` folds).
