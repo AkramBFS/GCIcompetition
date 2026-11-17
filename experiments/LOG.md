@@ -63,3 +63,23 @@ Deadline: **2026-11-20 01:00:00 UTC**
   - Mean Fold AUC: **`0.760117`** (`+0.008755` vs `lgb_raw`) | Pooled OOF AUC: **`0.760110`**
   - Folds improved: `5/5` -> **KEEP** (new incumbent: `lgb_f2`, active families: `["F2"]`).
 - **Hypothesis (`lgb_f2_f3` — F3 Age & Temporal Ratios):** Adding `AGE_YEARS`, `EMPLOYED_TO_AGE`, `REGISTRATION_TO_AGE`, `ID_PUBLISH_TO_AGE`, `CAR_AGE_TO_AGE`, `PHONE_CHANGE_TO_AGE`, `PHONE_CHANGE_TO_EMPLOYED`, and `AGE_AT_LAST_PAYMENT` captures career/document/phone stability relative to age and retirement-horizon loan maturity (`AGE_AT_LAST_PAYMENT`). Expected effect: `+0.0005` to `+0.0020` mean AUC gain (`5/5` folds).
+- **Result (`lgb_f2_f3`, 50 features):**
+  - Fold AUCs: `[0.757866, 0.760734, 0.764719, 0.755379, 0.761691]` (mean best iter `377.4`)
+  - Mean Fold AUC: `0.760078` (`-0.000039` vs `lgb_f2`) | Pooled OOF AUC: `0.760021`
+  - Folds improved: `2/5` -> **REJECT** (incumbent remains `lgb_f2`).
+- **Hypothesis (`lgb_f2_f4_tr` — F4 Peer-Relative & Frequency, Train-Only):** Adding 25 peer-relative group features (mean/diff of `EXT_MEAN`, `AMT_INCOME_TOTAL`, `CREDIT_TERM`, `AGE_YEARS` across `ORG`, `OCC`, `EDU`, `INC`, `OCC_EDU`, min group size 30) plus 8 categorical `FREQ_*` columns computed strictly on `train` should provide peer-context signal (`+0.0005` to `+0.0020` mean AUC).
+- **Result (`lgb_f2_f4_tr`, 75 features):**
+  - Fold AUCs: `[0.755522, 0.760590, 0.761617, 0.755114, 0.759036]` (mean best iter `399.6`)
+  - Mean Fold AUC: `0.758376` (`-0.001741` vs `lgb_f2`) | Pooled OOF AUC: `0.758364`
+  - Folds improved: `0/5` -> **REJECT** (33 collinear group/freq columns severely diluted `feature_fraction=0.35` trees).
+- **Hypothesis (`lgb_f2_f4_trte` — F4 A/B Test Train+Test Stats):** Re-running F4 with `use_test_for_stats=True` (label-free transductive statistics) tests whether larger sample counts improve peer means/frequencies by `>= +0.0002` over `lgb_f2_f4_tr` (kept only if gain `>= +0.0002`).
+- **Result (`lgb_f2_f4_trte`, 75 features):**
+  - Fold AUCs: `[0.756226, 0.760366, 0.762502, 0.754139, 0.758303]` (mean best iter `338.4`)
+  - Mean Fold AUC: `0.758307` (`-0.000068` vs `lgb_f2_f4_tr`, `2/5` folds improved) | Pooled OOF AUC: `0.758261`
+  - A/B Decision: delta `-0.000068 < 0.0002` -> keep **train-only** (`USE_TEST_FOR_STATS = False`, zero rule risk); F4 overall **REJECT**, incumbent stays `lgb_f2`.
+- **Hypothesis (`lgb_f2_f5` — F5 Loan-Structure Density):** Adding 3 train-only density count features (`DENSITY_CREDIT_ANNUITY`, `DENSITY_GOODS_PRICE`, `DENSITY_CREDIT_TERM_ROUND`) captures popular retail loan templates without diluting `feature_fraction` (`45` features total). Expected effect: `+0.0002` to `+0.0008` mean AUC.
+- **Result (`lgb_f2_f5`, 45 features):**
+  - Fold AUCs: `[0.759308, 0.761988, 0.766030, 0.758110, 0.761511]` (mean best iter `359.2`)
+  - Mean Fold AUC: **`0.761389`** (`+0.001273` vs `lgb_f2`) | Pooled OOF AUC: **`0.761348`**
+  - Folds improved: `4/5` -> **KEEP** (new incumbent: `lgb_f2_f5`, active families: `["F2", "F5"]`).
+- **Hypothesis (`lgb_f2_f5_f6` — F6 Nested Target Encoding):** Adding fold-isolated 5-fold inner-OOF smoothed target encodings (`alpha=50`) for `ORGANIZATION_TYPE` and `OCCUPATION_TYPE` (`47` features total) provides smoothed numeric risk priors for the 58-category `ORGANIZATION_TYPE` and 19-category `OCCUPATION_TYPE`. Expected effect: `+0.0002` to `+0.0006` mean AUC (`>= 4/5` folds).
