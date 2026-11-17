@@ -24,8 +24,9 @@ N_SPLITS = 5
 # Leave one logical core free when running heavy training jobs
 N_THREADS = max(1, (os.cpu_count() or 4) - 1)
 
-# Noise floor measured in P2 (updated after lgb_raw_s7)
-NOISE_FLOOR = 0.0002
+# Noise floor measured in P2 (abs(lgb_raw - lgb_raw_s7) mean fold AUC diff)
+NOISE_FLOOR = 0.000072
+MIN_GAIN = max(0.0002, NOISE_FLOOR)
 
 # Feature engineering switches
 ALL_FAMILIES = ["F0", "F1", "F2", "F3", "F4", "F5", "F6"]

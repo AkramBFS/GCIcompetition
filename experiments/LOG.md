@@ -30,5 +30,21 @@ Deadline: **2026-11-20 01:00:00 UTC**
 ## Experiment Log (Hypotheses, Results, Verdicts)
 
 ### P2: Raw Baseline & Noise Floor
+- **Start UTC:** `2026-11-17T19:58:17Z`
 - **Hypothesis (`lgb_raw`):** Training `LGB_START` (`EXP_LR=0.06`, seed `42`, native `category` dtypes for all 8 string columns, raw `NaN` untouched) on all 32 raw columns across fixed 5-fold CV should substantially beat the tutorial LightGBM baseline (`0.7443`) by preserving categorical features and early stopping, landing around `0.748–0.753` OOF AUC.
-- **Hypothesis (`lgb_raw_s7`):** Re-running `lgb_raw` identically with `seed=7` measures the pure model-seed variance (noise floor `abs(delta)`), expected `< 0.0003`.
+- **Result (`lgb_raw`, 32 raw features):**
+  - Fold AUCs: `[0.748225, 0.751686, 0.756469, 0.746328, 0.754102]` (mean best iter `369.8`)
+  - Mean Fold AUC: **`0.751362`** (`+/- 0.003711`) | Pooled OOF AUC: **`0.751310`**
+- **Hypothesis (`lgb_raw_s7`):** Re-running `lgb_raw` identically with `seed=7` measures pure model-seed variance (noise floor `abs(delta)`), expected `< 0.0003`.
+- **Result (`lgb_raw_s7`, 32 raw features):**
+  - Fold AUCs: `[0.748042, 0.752491, 0.757150, 0.745964, 0.753525]` (mean best iter `360.2`)
+  - Mean Fold AUC: **`0.751434`** (`+/- 0.003990`) | Pooled OOF AUC: **`0.751391`**
+  - Delta vs `lgb_raw`: `+0.000072` mean fold AUC (`2/5` folds improved).
+- **Noise Floor:** `abs(delta) = 0.000072` (`< 0.0002`). Acceptance threshold remains `max(0.0002, NOISE_FLOOR) = +0.0002` mean fold AUC and `>= 4/5` folds improved.
+- **Submission:** `submissions/sub_01_lgb_raw.csv` (with `submissions/sub_01_lgb_raw.json`) validated against `sample_submission.csv`.
+- **Gate P2:** PASSED. Current incumbent: `lgb_raw` (`0.751362`).
+
+---
+
+### P3: Feature Families (EXP_LR = 0.06, Incumbent starts at `lgb_raw`)
+- **Hypothesis (`lgb_f0` — F0 Cleaning & Flags):** Adding `NAN_COUNT`, `DAYS_EMPLOYED_ANOM` (and replacing `365243 -> NaN`), `OWN_CAR_AGE_ANOM` (and replacing `>=60 -> NaN`), `BUREAU_MISSING`, and replacing `"XNA"`/`"Unknown"` placeholders with `NaN` cleanly separates anomaly regimes from true distributions. Expected effect: `+0.0003` to `+0.0010` mean AUC gain.
