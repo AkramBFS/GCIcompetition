@@ -50,4 +50,38 @@ XGB_USE_CODES: bool = True
 CATBOOST_AVAILABLE: bool = True
 
 FINAL_SEEDS = [42, 1024, 2025]
+CAT_FINAL_SEEDS = [42, 1024]
 XGB_FINAL_SEEDS = [42, 1024]
+
+CAT_FINAL_PARAMS: dict = {
+    "loss_function": "Logloss",
+    "eval_metric": "AUC",
+    "depth": 6,
+    "learning_rate": 0.04,
+    "l2_leaf_reg": 5.0,
+    "bootstrap_type": "Bernoulli",
+    "subsample": 0.8,
+    "iterations": 4000,
+    "early_stopping_rounds": 250,
+}
+
+XGB_FINAL_PARAMS: dict = {
+    "objective": "binary:logistic",
+    "eval_metric": "auc",
+    "tree_method": "hist",
+    "max_depth": 5,
+    "learning_rate": 0.03,
+    "subsample": 0.8,
+    "colsample_bytree": 0.5,
+    "min_child_weight": 20,
+    "reg_lambda": 10.0,
+    "n_estimators": 5000,
+    "early_stopping_rounds": 200,
+}
+
+# Equal-weight rank blend across the 3 model families (LGB 3 seeds, CatBoost 2 seeds, XGBoost 2 seeds)
+FINAL_BLEND_WEIGHTS: dict[str, float] = {
+    "lgb": 1.0 / 3.0,
+    "cat": 1.0 / 3.0,
+    "xgb": 1.0 / 3.0,
+}

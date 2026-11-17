@@ -170,3 +170,22 @@ Deadline: **2026-11-20 01:00:00 UTC**
 ### P8: Multi-Seed Runs and Rank Blend (46 effective features)
 - **Start UTC:** `2026-11-17T22:30:18Z`
 - **Hypothesis (`multi-seed`):** Averaging ranks across multiple random seeds within each diverse GBDT family (LightGBM tuned seeds `42, 1024, 2025`; XGBoost codes seeds `42, 1024`; CatBoost seeds `42, 1024`) reduces model-seed variance before combining families via `rank_blend` (`+0.0002` to `+0.0005` over 3 single-seed models `0.764937`).
+- **Individual Multi-Seed Runs:**
+  - `lgb_tuned_lr02` (seed 42): mean fold `0.763523` | pooled OOF `0.763490`
+  - `lgb_final_s1024` (seed 1024): mean fold `0.763464` | pooled OOF `0.763457`
+  - `lgb_final_s2025` (seed 2025): mean fold `0.763468` | pooled OOF `0.763434`
+  - `cat_frozen` (seed 42): mean fold `0.763174` | pooled OOF `0.763124`
+  - `cat_final_s1024` (seed 1024): mean fold `0.763234` | pooled OOF `0.763206`
+  - `xgb_frozen_codes` (seed 42): mean fold `0.763183` | pooled OOF `0.763140`
+  - `xgb_final_s1024` (seed 1024): mean fold `0.763395` | pooled OOF `0.763365`
+- **Family Multi-Seed Rank Averages:**
+  - `LGB_3SEED`: mean fold `0.763910` | pooled OOF `0.763889` (`+0.000399` over single seed)
+  - `CAT_2SEED`: mean fold `0.763862` | pooled OOF `0.763828` (`+0.000704` over single seed)
+  - `XGB_2SEED`: mean fold `0.763846` | pooled OOF `0.763817` (`+0.000677` over single seed)
+- **Rank Blend (`blend_final`):**
+  - Equal-weight across all 3 families (`[1/3, 1/3, 1/3]` -> per-run `[1/9, 1/9, 1/9, 1/6, 1/6, 1/6, 1/6]`):
+    - Fold AUCs: `[0.762728, 0.766599, 0.770005, 0.761713, 0.764984]`
+    - Mean Fold AUC: **`0.765206`** | Pooled OOF AUC: **`0.765177`** (`+0.001288` over best multi-seed family, `+0.000240` over 3 single-seed blend).
+  - Coarse 0.1 weight grid search best `(0.3, 0.4, 0.3)`: `0.765203` (`+0.000026` over equal weights, `3/5` folds improved) -> **REJECT** unequal weights (`< 0.0002` threshold); keep equal family weights `(1/3, 1/3, 1/3)`.
+- **Submission:** `submissions/sub_03_blend.csv` (+ `.json`) validated against `sample_submission.csv`.
+- **Gate P8:** PASSED (`blend_final` saved to `experiments/blend_final/` and `tracker.csv`).
