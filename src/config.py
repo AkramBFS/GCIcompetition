@@ -28,9 +28,9 @@ N_THREADS = max(1, (os.cpu_count() or 4) - 1)
 NOISE_FLOOR = 0.000072
 MIN_GAIN = max(0.0002, NOISE_FLOOR)
 
-# Feature engineering switches
+# Feature engineering switches (frozen at freeze-features-v1)
 ALL_FAMILIES = ["F0", "F1", "F2", "F3", "F4", "F5", "F6"]
-FROZEN_FAMILIES: list[str] = ["F0", "F1", "F2", "F3", "F4"]
+FROZEN_FAMILIES: list[str] = ["F2", "F5", "F6"]
 USE_TEST_FOR_STATS = False
 DROPPED_FEATURES: list[str] = []
 

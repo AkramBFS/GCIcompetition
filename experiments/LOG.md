@@ -88,3 +88,23 @@ Deadline: **2026-11-20 01:00:00 UTC**
   - Mean Fold AUC: **`0.761844`** (`+0.000455` vs `lgb_f2_f5`) | Pooled OOF AUC: **`0.761783`**
   - Folds improved: `4/5` -> **KEEP** (new incumbent: `lgb_f2_f5_f6`, active families: `["F2", "F5", "F6"]`).
 - **Hypothesis (`lgb_f2_f5_f6_f1core` — Compact Core F1 on `F2+F5+F6`):** Earlier full `F1` (18 columns) diluted `feature_fraction=0.35`. Keeping only the 6 core F1 summaries (`EXT_MEAN`, `EXT_STD`, `EXT_PROD`, `EXT_NMISS`, `EXT_WMEAN`, `EXT_MEAN_X_CREDIT_TERM`) on top of `F2+F5+F6` (`51` effective features) should capture cross-bureau agreement/interaction without feature dilution. Expected effect: `+0.0005` to `+0.0020` mean AUC (`>= 4/5` folds).
+- **Result (`lgb_f2_f5_f6_f1core`, 51 effective features):**
+  - Fold AUCs: `[0.757660, 0.762605, 0.766332, 0.758872, 0.760707]` (mean best iter `394.4`)
+  - Mean Fold AUC: `0.761235` (`-0.000609` vs `lgb_f2_f5_f6`) | Pooled OOF AUC: `0.761212`
+  - Folds improved: `1/5` -> **REJECT** (even core F1 summaries hurt when trees already have raw `EXT_SOURCE_1/2/3`, `F2`, `F5`, `F6`).
+
+#### Feature Freeze Gate (`freeze-features-v1`)
+- **Frozen Families:** `["F2", "F5", "F6"]` (`USE_TEST_FOR_STATS = False`, `47` effective columns inside folds).
+- **Hypothesis (`lgb_frozen_lr02`):** Lowering LightGBM learning rate from `EXP_LR=0.06` to `FINAL_LR=0.02` with `deterministic=True` and `force_row_wise=True` on the frozen feature set allows finer tree steps and reduces variance. Expected effect: `+0.0008` to `+0.0020` mean AUC over `lgb_f2_f5_f6` (`0.761844`).
+- **Result (`lgb_frozen_lr02`, 47 effective features, `lr=0.02`, deterministic):**
+  - Fold AUCs: `[0.760258, 0.763800, 0.767796, 0.759578, 0.763137]` (mean best iter `1131.6`)
+  - Mean Fold AUC: **`0.762914`** (`+0.001070` vs `lgb_f2_f5_f6`) | Pooled OOF AUC: **`0.762892`**
+  - Folds improved: `4/5` -> **KEEP**
+- **Submission:** `submissions/sub_02_lgb_frozen_lr02.csv` (+ `.json`) validated against `sample_submission.csv`.
+- **Gate P3:** PASSED (`freeze-features-v1` tagged, 6/6 unit tests pass).
+
+---
+
+### P4: Feature Pruning (`EXP_LR = 0.06`, baseline `lgb_f2_f5_f6` = `0.761844`)
+- **Hypothesis (`lgb_prune_zero`):** `FLAG_MOBIL` had `0.0` gain across all 5 folds (`0` only occurs once in train and `0` times in test). Dropping `FLAG_MOBIL` (`46` effective features) should match or slightly improve AUC (`>= -0.0001`).
+- **Hypothesis (`lgb_prune_bot30`):** Dropping the bottom 30% (14 lowest-gain columns: `AMT_INCOME_TOTAL`, `INCOME_PER_CHILD`, `NAME_FAMILY_STATUS`, `FLAG_WORK_PHONE`, `AMT_REQ_CREDIT_BUREAU_QRT`, `NAME_HOUSING_TYPE`, `NAME_INCOME_TYPE`, `NAME_CONTRACT_TYPE`, `AMT_REQ_CREDIT_BUREAU_MON`, `CNT_FAM_MEMBERS`, `CNT_CHILDREN`, `AMT_REQ_CREDIT_BUREAU_HOUR`, `FLAG_EMP_PHONE`, `FLAG_MOBIL`) tests whether removing low-signal features reduces `feature_fraction` noise (`33` effective features). Keep only if mean AUC delta `>= -0.0001`.
