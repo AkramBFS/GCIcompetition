@@ -35,7 +35,17 @@ USE_TEST_FOR_STATS = False
 DROPPED_FEATURES: list[str] = ["FLAG_MOBIL"]
 
 # Tuned model configurations (populated in P5 / P8)
-LGB_TUNED_PARAMS: dict = {}
+LGB_TUNED_PARAMS: dict = {
+    "max_depth": 4,
+    "num_leaves": 15,
+    "min_data_in_leaf": 93,
+    "feature_fraction": 0.2416696493365781,
+    "bagging_fraction": 0.8439312348371466,
+    "lambda_l2": 2.2453924433747887,
+    "lambda_l1": 3.441802045844477,
+    "min_gain_to_split": 0.123735565793759,
+    "bagging_freq": 1,
+}
 XGB_USE_CODES: bool = False
 CATBOOST_AVAILABLE: bool = True
 

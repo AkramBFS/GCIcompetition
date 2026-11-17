@@ -120,4 +120,21 @@ Deadline: **2026-11-20 01:00:00 UTC**
 ---
 
 ### P5: LightGBM Hyperparameter Tuning (Optuna TPE, `EXP_LR = 0.06`, 46 features)
+- **Start UTC:** `2026-11-17T20:29:38Z`
 - **Hypothesis (`tune_lgb`):** Exploring `num_leaves` (12–48), `max_depth` (4–8), `min_data_in_leaf` (50–400), `feature_fraction` (0.2–0.7), `bagging_fraction` (0.6–0.95), `lambda_l2` (1–30), `lambda_l1` (0–5), and `min_gain_to_split` (0–0.5) over 20 Optuna TPE trials at `EXP_LR=0.06` will identify stronger regularization / column subsampling settings (`+0.0003` to `+0.0015` mean AUC at `lr=0.02`).
+- **Optuna Results (20/20 trials completed in 36.7 min, study `lgb_home_credit_v1`):**
+  - Top 1 (Trial #12): `mean_fold_auc=0.762675`, `pooled_oof_auc=0.762634` (`+0.000831` vs `lgb_prune_zero` `0.761844` at `EXP_LR=0.06`), `max_depth=4`, `num_leaves=15`, `min_data_in_leaf=93`, `feature_fraction=0.2417`, `bagging_fraction=0.8439`, `lambda_l2=2.245`, `lambda_l1=3.442`, `min_gain_to_split=0.1237`, `bagging_freq=1`.
+  - Top 2 (Trial #15): `mean_fold_auc=0.762519` (`max_depth=5`, `num_leaves=14`, `min_data_in_leaf=220`, `feature_fraction=0.3470`, `lambda_l1=4.412`).
+  - Top 3 (Trial #11): `mean_fold_auc=0.762511` (`max_depth=4`, `num_leaves=15`, `min_data_in_leaf=62`, `feature_fraction=0.3080`, `lambda_l1=4.764`).
+- **Hypothesis (`lgb_tuned_lr02`):** Refitting Trial #12 (`LGB_TUNED_PARAMS`) at `FINAL_LR=0.02` (`deterministic=True`, `force_row_wise=True`) on the 46 pruned/frozen features will beat `lgb_frozen_lr02` (`0.762914`) by `+0.0005` to `+0.0015` mean AUC across `>= 4/5` folds.
+- **Result (`lgb_tuned_lr02`, 46 effective features, `lr=0.02`, deterministic):**
+  - Fold AUCs: `[0.761013, 0.764407, 0.768356, 0.759977, 0.763864]` (mean best iter `1805.0`)
+  - Mean Fold AUC: **`0.763523`** (`+0.000609` vs `lgb_frozen_lr02`) | Pooled OOF AUC: **`0.763490`**
+  - Folds improved: `5/5` -> **KEEP** (primary LightGBM configuration updated to `LGB_TUNED_PARAMS`).
+- **Gate P5:** PASSED (`lgb_tuned_lr02` improves 5/5 folds over `lgb_frozen_lr02`).
+
+---
+
+### P6: XGBoost and CatBoost on Frozen Features (46 effective features)
+- **Hypothesis (`xgb_frozen_cat`):** Training `XGBClassifier` (`tree_method="hist"`, `max_depth=5`, `lr=0.03`, `subsample=0.8`, `colsample_bytree=0.5`, `min_child_weight=20`, `reg_lambda=10`, `enable_categorical=True`) on the exact same 5 folds provides genuinely diverse partition-based trees (~`0.760–0.764` OOF AUC) for ensembling.
+- **Hypothesis (`xgb_frozen_codes`):** Comparing integer-encoded categoricals (`--xgb-codes`) against `enable_categorical=True` checks whether optimal histogram categorical partitioning hurts on high-cardinality `ORGANIZATION_TYPE` (58 levels) relative to ordinal integer splits. Keep `enable_categorical=True` unless it errors or loses `> 0.001` AUC.
