@@ -136,5 +136,24 @@ Deadline: **2026-11-20 01:00:00 UTC**
 ---
 
 ### P6: XGBoost and CatBoost on Frozen Features (46 effective features)
+- **Start UTC:** `2026-11-17T21:11:55Z`
 - **Hypothesis (`xgb_frozen_cat`):** Training `XGBClassifier` (`tree_method="hist"`, `max_depth=5`, `lr=0.03`, `subsample=0.8`, `colsample_bytree=0.5`, `min_child_weight=20`, `reg_lambda=10`, `enable_categorical=True`) on the exact same 5 folds provides genuinely diverse partition-based trees (~`0.760–0.764` OOF AUC) for ensembling.
+- **Result (`xgb_frozen_cat`, 46 effective features):**
+  - Fold AUCs: `[0.759842, 0.762696, 0.767052, 0.759084, 0.761931]` (mean best iter `734.8`)
+  - Mean Fold AUC: `0.762121` | Pooled OOF AUC: `0.762037`
 - **Hypothesis (`xgb_frozen_codes`):** Comparing integer-encoded categoricals (`--xgb-codes`) against `enable_categorical=True` checks whether optimal histogram categorical partitioning hurts on high-cardinality `ORGANIZATION_TYPE` (58 levels) relative to ordinal integer splits. Keep `enable_categorical=True` unless it errors or loses `> 0.001` AUC.
+- **Result (`xgb_frozen_codes`, 46 effective features):**
+  - Fold AUCs: `[0.760764, 0.763172, 0.768755, 0.760056, 0.763168]` (mean best iter `983.4`)
+  - Mean Fold AUC: **`0.763183`** (`+0.001062` vs `xgb_frozen_cat`, `5/5` folds improved) | Pooled OOF AUC: **`0.763140`**
+  - Decision: `enable_categorical=True` loses `0.001062 > 0.001` against integer codes -> set **`XGB_USE_CODES = True`**.
+- **Hypothesis (`cat_frozen` — CatBoost):** Training `CatBoostClassifier` (symmetric oblivious trees, `depth=6`, `lr=0.04`, `l2_leaf_reg=5`, Bernoulli `subsample=0.8`, `iterations=4000`, `early_stopping_rounds=250`, native ordered target statistics on 8 `cat_features`) provides maximal structural diversity vs leaf-wise LightGBM and depth-wise XGBoost (~`0.761–0.764` OOF AUC) and strong ensemble boost.
+- **Result (`cat_frozen`, 46 effective features, 54.4 min wall time):**
+  - Fold AUCs: `[0.761321, 0.764779, 0.767248, 0.759935, 0.762587]` (mean best iter `1420.6`)
+  - Mean Fold AUC: **`0.763174`** | Pooled OOF AUC: **`0.763124`** (leads Folds 0 & 1 across all families).
+  - Note: 5-fold CatBoost took 54.4 min (> 8 min), so per P8 plan we will run 2 CatBoost seeds (`42`, `1024`) in P8.
+- **Gate P6:** PASSED (`xgb_frozen_codes` and `cat_frozen` both > `0.7631` pooled OOF AUC).
+
+---
+
+### P7: Diversity Model (`lgb_diverse_et`)
+- **Hypothesis (`lgb_diverse_et`):** Training an `extra_trees=True` LightGBM (`num_leaves=18`, `max_depth=5`, `min_data_in_leaf=150`, `feature_fraction=0.28`, `bagging_fraction=0.8`, `lambda_l1=3.0`, `lambda_l2=5.0`, `lr=0.02`, deterministic) uses randomized split thresholds rather than greedy exact splits, reducing correlation with GBDTs. Keep in the final blend only if adding it to `(lgb_tuned_lr02, xgb_frozen_codes, cat_frozen)` improves pooled OOF AUC by `>= +0.0003`.

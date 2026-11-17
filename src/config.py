@@ -46,7 +46,7 @@ LGB_TUNED_PARAMS: dict = {
     "min_gain_to_split": 0.123735565793759,
     "bagging_freq": 1,
 }
-XGB_USE_CODES: bool = False
+XGB_USE_CODES: bool = True
 CATBOOST_AVAILABLE: bool = True
 
 FINAL_SEEDS = [42, 1024, 2025]
