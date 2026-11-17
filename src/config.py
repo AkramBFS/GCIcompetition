@@ -32,7 +32,7 @@ MIN_GAIN = max(0.0002, NOISE_FLOOR)
 ALL_FAMILIES = ["F0", "F1", "F2", "F3", "F4", "F5", "F6"]
 FROZEN_FAMILIES: list[str] = ["F2", "F5", "F6"]
 USE_TEST_FOR_STATS = False
-DROPPED_FEATURES: list[str] = []
+DROPPED_FEATURES: list[str] = ["FLAG_MOBIL"]
 
 # Tuned model configurations (populated in P5 / P8)
 LGB_TUNED_PARAMS: dict = {}

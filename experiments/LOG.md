@@ -106,5 +106,18 @@ Deadline: **2026-11-20 01:00:00 UTC**
 ---
 
 ### P4: Feature Pruning (`EXP_LR = 0.06`, baseline `lgb_f2_f5_f6` = `0.761844`)
+- **Start UTC:** `2026-11-17T20:25:54Z`
 - **Hypothesis (`lgb_prune_zero`):** `FLAG_MOBIL` had `0.0` gain across all 5 folds (`0` only occurs once in train and `0` times in test). Dropping `FLAG_MOBIL` (`46` effective features) should match or slightly improve AUC (`>= -0.0001`).
+- **Result (`lgb_prune_zero`, 46 effective features):**
+  - Fold AUCs: `[0.759344, 0.762811, 0.765261, 0.759736, 0.762068]`
+  - Mean Fold AUC: `0.761844` (`+0.000000` exact tie) | Pooled OOF AUC: `0.761783` -> **KEEP** (simpler wins ties; `DROPPED_FEATURES = ["FLAG_MOBIL"]`).
 - **Hypothesis (`lgb_prune_bot30`):** Dropping the bottom 30% (14 lowest-gain columns: `AMT_INCOME_TOTAL`, `INCOME_PER_CHILD`, `NAME_FAMILY_STATUS`, `FLAG_WORK_PHONE`, `AMT_REQ_CREDIT_BUREAU_QRT`, `NAME_HOUSING_TYPE`, `NAME_INCOME_TYPE`, `NAME_CONTRACT_TYPE`, `AMT_REQ_CREDIT_BUREAU_MON`, `CNT_FAM_MEMBERS`, `CNT_CHILDREN`, `AMT_REQ_CREDIT_BUREAU_HOUR`, `FLAG_EMP_PHONE`, `FLAG_MOBIL`) tests whether removing low-signal features reduces `feature_fraction` noise (`33` effective features). Keep only if mean AUC delta `>= -0.0001`.
+- **Result (`lgb_prune_bot30`, 33 effective features):**
+  - Fold AUCs: `[0.758808, 0.762383, 0.765628, 0.758539, 0.762038]`
+  - Mean Fold AUC: `0.761479` (`-0.000365` vs `lgb_f2_f5_f6`, `1/5` folds) -> **REJECT**.
+- **Gate P4:** PASSED (`DROPPED_FEATURES = ["FLAG_MOBIL"]`, `46` effective features: `31` raw + `10` F2 + `3` F5 + `2` F6).
+
+---
+
+### P5: LightGBM Hyperparameter Tuning (Optuna TPE, `EXP_LR = 0.06`, 46 features)
+- **Hypothesis (`tune_lgb`):** Exploring `num_leaves` (12–48), `max_depth` (4–8), `min_data_in_leaf` (50–400), `feature_fraction` (0.2–0.7), `bagging_fraction` (0.6–0.95), `lambda_l2` (1–30), `lambda_l1` (0–5), and `min_gain_to_split` (0–0.5) over 20 Optuna TPE trials at `EXP_LR=0.06` will identify stronger regularization / column subsampling settings (`+0.0003` to `+0.0015` mean AUC at `lr=0.02`).
