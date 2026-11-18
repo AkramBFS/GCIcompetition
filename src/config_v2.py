@@ -114,6 +114,9 @@ XGB_FINAL_SEEDS = [42, 1024]
 CAT_FINAL_SEEDS = [42, 1024]
 MLP_FINAL_SEEDS = [42, 1024]
 
+# Selected LightGBM configuration for v2 (Optuna top-3 from experiments/lgb_top_params.json)
+LGB_FINAL_PARAMS: dict = dict(LGB_TOP_PARAMS[2])
+
 # Frozen feature views (populated at P4 gate / freeze-features-v2)
 VIEW_A_FAMILIES: list[str] = ["F2", "F5_LOO", "F6", "A1", "A6_INT"]
 VIEW_B_FAMILIES: list[str] = ["F0", "F1", "F2", "F3", "F5_LOO", "F6", "A1", "A5", "A6_INT"]

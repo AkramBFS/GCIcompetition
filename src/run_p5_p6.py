@@ -163,14 +163,25 @@ def _rank_avg_group(names: list[str]) -> tuple[np.ndarray, np.ndarray]:
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run P5 models and P6 Honest Blend-CV.")
+    parser.add_argument("--p6-only", action="store_true", help="Skip appending P5 logs and run P6 blend update.")
+    args = parser.parse_args()
+
     now = datetime.now(timezone.utc)
     deadline = datetime(2026, 11, 20, 1, 0, 0, tzinfo=timezone.utc)
     hours_left = (deadline - now).total_seconds() / 3600.0
     print(f"P5/P6 Start UTC: {now.isoformat()} ({hours_left:.2f} h left)", flush=True)
-    append_log(
-        f"\n## Phase P5: Models on Frozen Views (`VIEW_A`, `VIEW_B`, `VIEW_C`)\n"
-        f"- **Start UTC:** `{now.isoformat()}` (**{hours_left:.2f} h** left)"
-    )
+    if not args.p6_only:
+        append_log(
+            f"\n## Phase P5: Models on Frozen Views (`VIEW_A`, `VIEW_B`, `VIEW_C`)\n"
+            f"- **Start UTC:** `{now.isoformat()}` (**{hours_left:.2f} h** left)"
+        )
+
+    def log_p5(msg: str) -> None:
+        if not args.p6_only:
+            append_log(msg)
 
     train, test, y, folds = load_data_v2()
     folds10 = np.load(FOLDS10_PATH)
@@ -207,11 +218,11 @@ def main() -> None:
             note=f"P5 LGB VIEW_A v1 top-{idx} params lr=0.02",
         )
         top_metas.append((idx, p, m, dt))
-        append_log(f"- **`lgb_v2_viewA_t{idx}_s42`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
+        log_p5(f"- **`lgb_v2_viewA_t{idx}_s42`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
 
     best_idx, best_lgb_params, best_t_meta, _ = max(top_metas, key=lambda x: x[2]["mean_fold_auc"])
     best_t1_name = f"lgb_v2_viewA_t{best_idx}_s42"
-    append_log(f"- **Selected `VIEW_A` LightGBM config:** `top-{best_idx}` (`{best_t1_name}`, mean `{best_t_meta['mean_fold_auc']:.6f}`).")
+    log_p5(f"- **Selected `VIEW_A` LightGBM config:** `top-{best_idx}` (`{best_t1_name}`, mean `{best_t_meta['mean_fold_auc']:.6f}`).")
 
     lgb_a_names = [best_t1_name]
     for s in FINAL_SEEDS:
@@ -233,7 +244,7 @@ def main() -> None:
             note=f"P5 LGB VIEW_A top-{best_idx} seed {s}",
         )
         lgb_a_names.append(f"lgb_v2_viewA_s{s}")
-        append_log(f"- **`lgb_v2_viewA_s{s}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
+        log_p5(f"- **`lgb_v2_viewA_s{s}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
 
     m_nat, dt_nat = run_or_load(
         "lgb_v2_viewA_natcat_s42",
@@ -250,7 +261,7 @@ def main() -> None:
         use_codes=False,
         note="P5 LGB VIEW_A native categoricals diversity",
     )
-    append_log(f"- **`lgb_v2_viewA_natcat_s42`** ({dt_nat:.1f}s): mean `{m_nat['mean_fold_auc']:.6f}` | pooled `{m_nat['pooled_oof_auc']:.6f}`")
+    log_p5(f"- **`lgb_v2_viewA_natcat_s42`** ({dt_nat:.1f}s): mean `{m_nat['mean_fold_auc']:.6f}` | pooled `{m_nat['pooled_oof_auc']:.6f}`")
 
     m_lr01, dt_lr01 = run_or_load(
         "lgb_v2_viewA_lr01_s42",
@@ -268,7 +279,7 @@ def main() -> None:
         note="P5 LGB VIEW_A Addendum A.7 lr=0.01 check",
     )
     lr01_gain = m_lr01["pooled_oof_auc"] - best_t_meta["pooled_oof_auc"]
-    append_log(
+    log_p5(
         f"- **`lgb_v2_viewA_lr01_s42`** ({dt_lr01:.1f}s): mean `{m_lr01['mean_fold_auc']:.6f}` | pooled `{m_lr01['pooled_oof_auc']:.6f}` (delta vs lr=0.02: `{lr01_gain:+.6f}`)"
     )
 
@@ -289,7 +300,7 @@ def main() -> None:
         note="P5 LGB VIEW_A 10-fold group CV",
     )
     f10_gain = m_10f["pooled_oof_auc"] - best_t_meta["pooled_oof_auc"]
-    append_log(
+    log_p5(
         f"- **`lgb_v2_viewA_10fold`** ({dt_10f:.1f}s): mean `{m_10f['mean_fold_auc']:.6f}` | pooled `{m_10f['pooled_oof_auc']:.6f}` (delta vs 5-fold: `{f10_gain:+.6f}`)"
     )
 
@@ -311,7 +322,7 @@ def main() -> None:
             note=f"P5 LGB VIEW_B seed {s}",
         )
         lgb_b_names.append(f"lgb_v2_viewB_s{s}")
-        append_log(f"- **`lgb_v2_viewB_s{s}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
+        log_p5(f"- **`lgb_v2_viewB_s{s}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
 
     lgb_c_names = []
     for s in FINAL_SEEDS:
@@ -331,7 +342,7 @@ def main() -> None:
             note=f"P5 LGB VIEW_C (A4 TE + KNN v2) seed {s}",
         )
         lgb_c_names.append(f"lgb_v2_viewC_s{s}")
-        append_log(f"- **`lgb_v2_viewC_s{s}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
+        log_p5(f"- **`lgb_v2_viewC_s{s}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
 
     # ------------------------------------------------------------------
     # 2. XGBoost models (integer codes)
@@ -354,7 +365,7 @@ def main() -> None:
                 note=f"P5 XGB VIEW_{v_code} integer codes seed {s}",
             )
             lst.append(nm)
-            append_log(f"- **`{nm}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
+            log_p5(f"- **`{nm}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
 
     # ------------------------------------------------------------------
     # 3. CatBoost "fast" models
@@ -375,7 +386,7 @@ def main() -> None:
             note=f"P5 CatBoost fast VIEW_A seed {s}",
         )
         cat_a_names.append(nm)
-        append_log(f"- **`{nm}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
+        log_p5(f"- **`{nm}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
 
     cat_b_names = ["cat_v2_viewB_fast_s42"]
     m, dt = run_or_load(
@@ -390,7 +401,7 @@ def main() -> None:
         seed=42,
         note="P5 CatBoost fast VIEW_B seed 42",
     )
-    append_log(f"- **`cat_v2_viewB_fast_s42`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
+    log_p5(f"- **`cat_v2_viewB_fast_s42`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
 
     cat_c_names = ["cat_v2_viewC_fast_s42"]
     m, dt = run_or_load(
@@ -405,7 +416,7 @@ def main() -> None:
         seed=42,
         note="P5 CatBoost fast VIEW_C seed 42",
     )
-    append_log(f"- **`cat_v2_viewC_fast_s42`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
+    log_p5(f"- **`cat_v2_viewC_fast_s42`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
 
     # ------------------------------------------------------------------
     # 4. Logistic Regression on Binned Inputs (C in {0.01, 0.1, 1.0})
@@ -427,7 +438,7 @@ def main() -> None:
             note=f"P5 Binned LogReg C={c_val}",
         )
         lr_metas.append((nm, m))
-        append_log(f"- **`{nm}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
+        log_p5(f"- **`{nm}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
     best_logreg_name, best_logreg_meta = max(lr_metas, key=lambda x: x[1]["mean_fold_auc"])
 
     # ------------------------------------------------------------------
@@ -451,22 +462,23 @@ def main() -> None:
         )
         mlp_names.append(nm)
         mlp_metas.append(m)
-        append_log(f"- **`{nm}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
+        log_p5(f"- **`{nm}`** ({dt:.1f}s): mean `{m['mean_fold_auc']:.6f}` | pooled `{m['pooled_oof_auc']:.6f}`")
 
     # ------------------------------------------------------------------
     # Phase P6: Honest Blend-CV & Stacking
     # ------------------------------------------------------------------
     now_p6 = datetime.now(timezone.utc)
     hours_left_p6 = (deadline - now_p6).total_seconds() / 3600.0
-    append_log(
-        f"\n## Phase P6: Stacking and Blending (5-fold Honest Blend-CV)\n"
-        f"- **Start UTC:** `{now_p6.isoformat()}` (**{hours_left_p6:.2f} h** left)"
+    p6_header = (
+        "\n### Phase P6 Finalized Pool (excluded weak 0.7562 natcat; included accepted 10-fold LGB)"
+        if args.p6_only
+        else "\n## Phase P6: Stacking and Blending (5-fold Honest Blend-CV)"
     )
+    append_log(f"{p6_header}\n- **Start UTC:** `{now_p6.isoformat()}` (**{hours_left_p6:.2f} h** left)")
 
-    # Multi-seed group summaries (per family & view)
+    # Multi-seed group summaries (per family & view; exclude weak natcat 0.7562; include accepted 10-fold LGB)
     core_groups: dict[str, list[str]] = {
         "LGB_VIEW_A": lgb_a_names + (["lgb_v2_viewA_lr01_s42"] if lr01_gain >= 0.0003 else []),
-        "LGB_VIEW_A_NATCAT": ["lgb_v2_viewA_natcat_s42"],
         "LGB_VIEW_B": lgb_b_names,
         "LGB_VIEW_C": lgb_c_names,
         "XGB_VIEW_A": xgb_a_names,
@@ -477,7 +489,8 @@ def main() -> None:
         "CAT_VIEW_C": cat_c_names,
     }
     if f10_gain >= 0.0003:
-        append_log("- Note: `lgb_v2_viewA_10fold` cleared +0.0003 over 5-fold; tracking its test predictions.")
+        core_groups["LGB_VIEW_A_10F"] = ["lgb_v2_viewA_10fold"]
+        append_log("- Note: `lgb_v2_viewA_10fold` cleared +0.0003 over 5-fold (`+0.000370`) -> admitted to pool.")
 
     oof_pool: dict[str, np.ndarray] = {}
     test_pool: dict[str, np.ndarray] = {}
@@ -608,6 +621,24 @@ def main() -> None:
     (blend_dir / "meta.json").write_text(json.dumps(blend_meta, indent=2), encoding="utf-8")
     write_submission(test, test_sub_preds, SUB_DIR / "sub_01_blend_v2.csv", meta=blend_meta)
 
+    # Also log blend_final_v2 into experiments_v2/tracker.csv cleanly
+    from src.cv_harness import _append_tracker
+
+    tracker_row = {
+        "name": "blend_final_v2",
+        "timestamp_utc": blend_meta["timestamp_utc"],
+        "n_rows": len(y),
+        "n_features": len(oof_pool),
+        "mean_fold_auc": f"{chosen_info['mean_fold_auc']:.6f}",
+        "std_fold_auc": f"{chosen_info['std_fold_auc']:.6f}",
+        "pooled_oof_auc": f"{chosen_info['pooled_oof_auc']:.6f}",
+        "mean_best_iter": "0.0",
+        "note": f"P6 {chosen_method} across {len(oof_pool)} model-view groups",
+    }
+    for idx, val in enumerate(chosen_info["fold_aucs"]):
+        tracker_row[f"fold_{idx}_auc"] = f"{val:.6f}"
+    _append_tracker(tracker_row, tracker_path=EXP_DIR / "tracker.csv")
+
     # Build matching ENABLE_LINKAGE=True variant (for standby shipping only if explicitly approved)
     link_names = []
     for kind, nm in [("lgb", "lgb_v2_viewA_link_s42"), ("xgb", "xgb_v2_viewA_link_s42"), ("cat", "cat_v2_viewA_link_s42")]:
@@ -629,7 +660,7 @@ def main() -> None:
             note=f"P6 ENABLE_LINKAGE=True standby {kind} VIEW_A",
         )
         link_names.append(nm)
-        append_log(f"- **`{nm}` (linkage standby)** ({dt_l:.1f}s): mean `{m_l['mean_fold_auc']:.6f}` | pooled `{m_l['pooled_oof_auc']:.6f}`")
+        log_p5(f"- **`{nm}` (linkage standby)** ({dt_l:.1f}s): mean `{m_l['mean_fold_auc']:.6f}` | pooled `{m_l['pooled_oof_auc']:.6f}`")
     lo, lt = _rank_avg_group(link_names)
     link_dir = EXP_DIR / "blend_final_v2_linkage"
     link_dir.mkdir(parents=True, exist_ok=True)

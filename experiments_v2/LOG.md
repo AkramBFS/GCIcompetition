@@ -156,3 +156,95 @@
   - `VIEW_B` (`["F0", "F1", "F2", "F3", "F5_LOO", "F6", "A1", "A5", "A6_INT"]`, 102 effective cols; `F4_LITE` excluded because LOO group means caused `0.9997` train-vs-test cardinality artifact): **`0.52580`** (**PASS**, `<= 0.53`).
   - `VIEW_C` (`VIEW_A` + `A4` TE combos `min_count=30` + `A3` KNN `k=500` `mode="v2"`, 61 effective cols): label-free adversarial AUC **`0.51703`** (**PASS**, `<= 0.53`).
 - **Gate P4:** PASSED (`freeze-features-v2` tagged).
+
+## Phase P5: Models on Frozen Views (`VIEW_A`, `VIEW_B`, `VIEW_C`)
+- **Start UTC:** `2026-11-18T13:15:18.733854+00:00` (**35.74 h** left)
+- **`lgb_v2_viewA_t1_s42`** (246.8s): mean `0.765325` | pooled `0.765283`
+- **`lgb_v2_viewA_t2_s42`** (269.9s): mean `0.765164` | pooled `0.765130`
+- **`lgb_v2_viewA_t3_s42`** (296.0s): mean `0.765439` | pooled `0.765338`
+- **Selected `VIEW_A` LightGBM config:** `top-3` (`lgb_v2_viewA_t3_s42`, mean `0.765439`).
+- **`lgb_v2_viewA_s1024`** (288.1s): mean `0.765365` | pooled `0.765298`
+- **`lgb_v2_viewA_s2025`** (290.6s): mean `0.765115` | pooled `0.765079`
+- **`lgb_v2_viewA_natcat_s42`** (201.9s): mean `0.756627` | pooled `0.756174`
+- **`lgb_v2_viewA_lr01_s42`** (582.0s): mean `0.765441` | pooled `0.765416` (delta vs lr=0.02: `+0.000078`)
+- **`lgb_v2_viewA_10fold`** (694.8s): mean `0.765771` | pooled `0.765708` (delta vs 5-fold: `+0.000370`)
+- **`lgb_v2_viewB_s42`** (434.5s): mean `0.764128` | pooled `0.764094`
+- **`lgb_v2_viewB_s1024`** (421.9s): mean `0.763936` | pooled `0.763911`
+- **`lgb_v2_viewB_s2025`** (507.2s): mean `0.764173` | pooled `0.764143`
+- **`lgb_v2_viewC_s42`** (457.9s): mean `0.765291` | pooled `0.765225`
+- **`lgb_v2_viewC_s1024`** (656.7s): mean `0.764806` | pooled `0.764724`
+- **`lgb_v2_viewC_s2025`** (794.1s): mean `0.765385` | pooled `0.765276`
+- **`xgb_v2_viewA_s42`** (546.0s): mean `0.764190` | pooled `0.764133`
+- **`xgb_v2_viewA_s1024`** (565.7s): mean `0.764386` | pooled `0.764349`
+- **`xgb_v2_viewB_s42`** (766.0s): mean `0.763091` | pooled `0.763027`
+- **`xgb_v2_viewB_s1024`** (816.3s): mean `0.762992` | pooled `0.762944`
+- **`xgb_v2_viewC_s42`** (708.2s): mean `0.763340` | pooled `0.763267`
+- **`xgb_v2_viewC_s1024`** (773.5s): mean `0.763973` | pooled `0.763861`
+- **`cat_v2_viewA_fast_s42`** (2575.4s): mean `0.763228` | pooled `0.763180`
+- **`cat_v2_viewA_fast_s1024`** (1857.1s): mean `0.763197` | pooled `0.763078`
+- **`cat_v2_viewB_fast_s42`** (2777.3s): mean `0.762446` | pooled `0.762397`
+- **`cat_v2_viewC_fast_s42`** (1916.5s): mean `0.761598` | pooled `0.761534`
+- **`logreg_v2_viewA_c001`** (43.0s): mean `0.754434` | pooled `0.754377`
+- **`logreg_v2_viewA_c01`** (48.1s): mean `0.753880` | pooled `0.753723`
+- **`logreg_v2_viewA_c10`** (59.0s): mean `0.748517` | pooled `0.748108`
+- **`mlp_v2_viewA_s42`** (376.5s): mean `0.743365` | pooled `0.743066`
+- **`mlp_v2_viewA_s1024`** (375.6s): mean `0.743902` | pooled `0.743699`
+
+## Phase P6: Stacking and Blending (5-fold Honest Blend-CV)
+- **Start UTC:** `2026-11-18T18:54:50.868941+00:00` (**30.09 h** left)
+- Note: `lgb_v2_viewA_10fold` cleared +0.0003 over 5-fold; tracking its test predictions.
+- Group `LGB_VIEW_A` (3 seeds): pooled OOF AUC `0.765648`
+- Group `LGB_VIEW_A_NATCAT` (1 seeds): pooled OOF AUC `0.756174`
+- Group `LGB_VIEW_B` (3 seeds): pooled OOF AUC `0.764476`
+- Group `LGB_VIEW_C` (3 seeds): pooled OOF AUC `0.765653`
+- Group `XGB_VIEW_A` (2 seeds): pooled OOF AUC `0.764770`
+- Group `XGB_VIEW_B` (2 seeds): pooled OOF AUC `0.763538`
+- Group `XGB_VIEW_C` (2 seeds): pooled OOF AUC `0.764298`
+- Group `CAT_VIEW_A` (2 seeds): pooled OOF AUC `0.764087`
+- Group `CAT_VIEW_B` (1 seeds): pooled OOF AUC `0.762397`
+- Group `CAT_VIEW_C` (1 seeds): pooled OOF AUC `0.761534`
+- **LogReg Admission Check (`logreg_v2_viewA_c001`, AUC=0.754377):** eq_gain=`-0.000030`, hill_gain=`+0.000000` -> `REJECT`
+- **MLP Admission Check (`MLP_2SEED`, AUC=0.747779):** eq_gain=`-0.000162`, hill_gain=`+0.000000` -> `REJECT`
+
+### Honest Blend-CV Comparison
+- `equal_rank`: mean `0.766547` (+/- 0.005198) | pooled `0.766445` | vs equal `+0.000000` (`0/5` folds)
+- `hill_climber`: mean `0.766809` (+/- 0.005055) | pooled `0.766725` | vs equal `+0.000262` (`3/5` folds)
+- `logreg_c0.01`: mean `0.766656` (+/- 0.005194) | pooled `0.766551` | vs equal `+0.000109` (`4/5` folds)
+- `logreg_c0.1`: mean `0.766609` (+/- 0.005163) | pooled `0.766500` | vs equal `+0.000062` (`4/5` folds)
+- `logreg_c1.0`: mean `0.766607` (+/- 0.005170) | pooled `0.766498` | vs equal `+0.000060` (`4/5` folds)
+- `et_restacker`: mean `0.765807` (+/- 0.005310) | pooled `0.765652` | vs equal `-0.000740` (`0/5` folds)
+- `meta_top2`: mean `0.766764` (+/- 0.005119) | pooled `0.766638` | vs equal `+0.000217` (`4/5` folds)
+- `meta_top3`: mean `0.766650` (+/- 0.005183) | pooled `0.766506` | vs equal `+0.000103` (`3/5` folds)
+- **Selected Final Blend Method:** **`equal_rank`** (mean fold `0.766547`, pooled `0.766445`).
+- **v2 Blend vs v1 Blend (on `folds_group.npy`):** `0.765179` -> **`0.766547`** (`+0.001368`, `4/5` folds improved)
+- **`lgb_v2_viewA_link_s42` (linkage standby)** (328.4s): mean `0.765077` | pooled `0.765025`
+- **`xgb_v2_viewA_link_s42` (linkage standby)** (481.9s): mean `0.764012` | pooled `0.763973`
+- **`cat_v2_viewA_link_s42` (linkage standby)** (2256.3s): mean `0.763214` | pooled `0.763100`
+
+### Phase P6 Finalized Pool (excluded weak 0.7562 natcat; included accepted 10-fold LGB)
+- **Start UTC:** `2026-11-18T19:56:04.472664+00:00` (**29.07 h** left)
+- Note: `lgb_v2_viewA_10fold` cleared +0.0003 over 5-fold (`+0.000370`) -> admitted to pool.
+- Group `LGB_VIEW_A` (3 seeds): pooled OOF AUC `0.765648`
+- Group `LGB_VIEW_B` (3 seeds): pooled OOF AUC `0.764476`
+- Group `LGB_VIEW_C` (3 seeds): pooled OOF AUC `0.765653`
+- Group `XGB_VIEW_A` (2 seeds): pooled OOF AUC `0.764770`
+- Group `XGB_VIEW_B` (2 seeds): pooled OOF AUC `0.763538`
+- Group `XGB_VIEW_C` (2 seeds): pooled OOF AUC `0.764298`
+- Group `CAT_VIEW_A` (2 seeds): pooled OOF AUC `0.764087`
+- Group `CAT_VIEW_B` (1 seeds): pooled OOF AUC `0.762397`
+- Group `CAT_VIEW_C` (1 seeds): pooled OOF AUC `0.761534`
+- Group `LGB_VIEW_A_10F` (1 seeds): pooled OOF AUC `0.765708`
+- **LogReg Admission Check (`logreg_v2_viewA_c001`, AUC=0.754377):** eq_gain=`-0.000049`, hill_gain=`+0.000000` -> `REJECT`
+- **MLP Admission Check (`MLP_2SEED`, AUC=0.747779):** eq_gain=`-0.000162`, hill_gain=`+0.000000` -> `REJECT`
+
+### Honest Blend-CV Comparison
+- `equal_rank`: mean `0.766841` (+/- 0.005077) | pooled `0.766777` | vs equal `+0.000000` (`0/5` folds)
+- `hill_climber`: mean `0.767049` (+/- 0.005169) | pooled `0.766978` | vs equal `+0.000208` (`5/5` folds)
+- `logreg_c0.01`: mean `0.767094` (+/- 0.005130) | pooled `0.767012` | vs equal `+0.000254` (`4/5` folds)
+- `logreg_c0.1`: mean `0.767072` (+/- 0.005132) | pooled `0.766988` | vs equal `+0.000231` (`4/5` folds)
+- `logreg_c1.0`: mean `0.767048` (+/- 0.005131) | pooled `0.766965` | vs equal `+0.000207` (`4/5` folds)
+- `et_restacker`: mean `0.766065` (+/- 0.005339) | pooled `0.765893` | vs equal `-0.000775` (`0/5` folds)
+- `meta_top2`: mean `0.767103` (+/- 0.005133) | pooled `0.767004` | vs equal `+0.000262` (`4/5` folds)
+- `meta_top3`: mean `0.766959` (+/- 0.005200) | pooled `0.766830` | vs equal `+0.000119` (`4/5` folds)
+- **Selected Final Blend Method:** **`equal_rank`** (mean fold `0.766841`, pooled `0.766777`).
+- **v2 Blend vs v1 Blend (on `folds_group.npy`):** `0.765179` -> **`0.766841`** (`+0.001662`, `5/5` folds improved)
