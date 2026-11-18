@@ -14,6 +14,8 @@ from sklearn.preprocessing import QuantileTransformer
 
 from src.cv_harness import align_categories
 
+# 25 dominant annuity-term peaks (local maxima with count >= 500 of AMT_CREDIT / AMT_ANNUITY rounded to 0.1)
+# observed on input/train.csv in src/audit_v2.py P1(d) (documented in experiments_v2/audit_v2.md).
 _DOMINANT_TERM_MODES = np.array(
     [
         8.4, 9.2, 9.4, 10.1, 12.6, 13.7, 14.9, 15.6, 16.5, 17.3,
@@ -45,12 +47,14 @@ def safe_div(numerator: pd.Series | np.ndarray, denominator: pd.Series | np.ndar
 
 def _clean_days_employed(df: pd.DataFrame) -> pd.Series:
     """Private helper: return DAYS_EMPLOYED with 365243 placeholder replaced by NaN."""
+    # 365243 is the official Home Credit pensioner/unemployed sentinel (30,898 train rows, tutorial.ipynb / data_profile.md).
     s = df["DAYS_EMPLOYED"].astype("float64")
     return s.where(s != 365243.0, np.nan)
 
 
 def _clean_own_car_age(df: pd.DataFrame) -> pd.Series:
     """Private helper: return OWN_CAR_AGE with >= 60 outliers replaced by NaN."""
+    # >= 60 outlier threshold identified in input/train.csv EDA (1,826 rows at 64/65/91 years, experiments/data_profile.md).
     s = df["OWN_CAR_AGE"].astype("float64")
     return s.where(s < 60.0, np.nan)
 
@@ -73,6 +77,7 @@ def _ext_mean(df: pd.DataFrame) -> pd.Series:
 
 def _clean_cat_placeholders(df: pd.DataFrame) -> pd.DataFrame:
     """Replace known placeholder tokens in categorical columns with NaN."""
+    # Placeholder strings documented in experiments/data_profile.md ("XNA" in ORGANIZATION_TYPE/CODE_GENDER; "Unknown" in NAME_FAMILY_STATUS).
     out = df.copy()
     for col in ("ORGANIZATION_TYPE", "CODE_GENDER"):
         if col in out.columns:
@@ -143,6 +148,8 @@ def _add_f1(
         skipped.append("F1:incomplete_EXT_SOURCE_columns")
         return tr, te
 
+    # Domain-prior weights ordering EXT_SOURCE_3 > EXT_SOURCE_1 > EXT_SOURCE_2, matching univariate train AUCs
+    # (0.6796 > 0.6647 > 0.6582 in experiments/data_profile.md); used only in VIEW_B F1.
     weights = np.array([2.0, 1.0, 3.0], dtype=np.float64)
 
     for df in (tr, te):
@@ -446,6 +453,8 @@ def _add_f5(
 
 def quantize_count(arr: np.ndarray | pd.Series) -> np.ndarray:
     """Coarsen high-frequency counts to avoid exact off-by-1 train-vs-test split separation."""
+    # Step cutoffs (<10 exact, 10..99 nearest 5, >=100 nearest 50) selected in P1(c) (experiments_v2/audit_v2.md)
+    # to eliminate off-by-1 train-vs-test count separation (engineered adv AUC 0.93734 -> 0.52464).
     s = np.asarray(arr, dtype=np.float64)
     return np.where(
         s < 10.0,
@@ -534,6 +543,7 @@ def _product_code_series(df: pd.DataFrame) -> pd.Series:
     goods = df["AMT_GOODS_PRICE"].to_numpy(dtype=np.float64)
     ct = _credit_term(df)
     tmode = _nearest_term_mode(ct)
+    # Round goods price to nearest 1,000 currency units (catalog product price bucket per A1 specification).
     goods_k = np.where(np.isfinite(goods), np.round(goods / 1000.0).astype(np.int64), -1)
     t_str = np.where(np.isfinite(tmode), np.round(tmode, 1).astype(str), "NA")
     return pd.Series([f"{g}_{t}" for g, t in zip(goods_k, t_str)], index=df.index, dtype="object")
@@ -887,8 +897,8 @@ def compute_nested_target_encoding(
     Xva: pd.DataFrame,
     Xte: pd.DataFrame,
     cols: tuple[str, ...] = ("ORGANIZATION_TYPE", "OCCUPATION_TYPE"),
-    alpha: float = 50.0,
-    min_count: int = 0,
+    alpha: float = 50.0,  # Pre-registered smoothing prior weight (F6/A4 specification)
+    min_count: int = 0,  # 0 for raw categoricals (F6); 30 for interaction combos (VIEW_C_TE_MIN_COUNT)
     n_inner_splits: int = 5,
     seed: int = 42,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -1011,7 +1021,7 @@ def compute_nested_knn_target_mean(
     Xte: pd.DataFrame,
     k_values: tuple[int, ...] = (500,),
     mode: str = "v1",
-    min_pattern_rows: int = 3000,
+    min_pattern_rows: int = 3000,  # Fallback threshold: train patterns 0,1,4,5 have 12.8k-64.2k rows/fold vs 23-132 for 2,3,6,7
     chunk_size: int = 5000,
     seed: int = 42,
     cache_dir: Path | None = None,

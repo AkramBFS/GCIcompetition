@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -18,6 +19,7 @@ from src.audit_v2 import make_fingerprint_key
 from src.config_v2 import (
     DROPPED_FEATURES,
     EXP_DIR,
+    FOLDS10_PATH,
     FOLDS_GROUP_PATH,
     INPUT_DIR,
     SEED,
@@ -229,7 +231,11 @@ def test_honest_blend_cv_isolation() -> None:
 
 
 def test_logreg_and_mlp_preprocessing_isolation() -> None:
-    """LogReg and MLP fit scalers/discretizers/encoders strictly on Xtr without leaking Xva."""
+    """LogReg and MLP fit scalers/discretizers/encoders strictly on Xtr without leaking Xva; torch stays lazy."""
+    import src.run_all_v2  # noqa: F401
+
+    assert "torch" not in sys.modules
+
     tr, te, y = _make_sample_frames(n_train=260, n_test=50)
     X, Xte = build_features(tr, te, families=["F2", "A1", "A6_INT"], dropped_features=DROPPED_FEATURES)
     Xtr, ytr = X.iloc[:200].reset_index(drop=True), y[:200]
@@ -245,9 +251,13 @@ def test_logreg_and_mlp_preprocessing_isolation() -> None:
     _, tp_lr_2, _ = logreg_binned_model({"C": 0.1}, seed=SEED)(Xtr, ytr, Xva_bad, yva_shuf, Xte)
     assert np.array_equal(tp_lr_1, tp_lr_2)
 
-    _, tp_mlp_1, _ = mlp_model({"epochs": 1}, seed=SEED)(Xtr, ytr, Xva, yva, Xte)
-    _, tp_mlp_2, _ = mlp_model({"epochs": 1}, seed=SEED)(Xtr, ytr, Xva_bad, yva_shuf, Xte)
-    assert np.allclose(tp_mlp_1, tp_mlp_2, atol=1e-6, rtol=0.0)
+    if importlib.util.find_spec("torch") is not None:
+        _, tp_mlp_1, _ = mlp_model({"epochs": 1}, seed=SEED)(Xtr, ytr, Xva, yva, Xte)
+        _, tp_mlp_2, _ = mlp_model({"epochs": 1}, seed=SEED)(Xtr, ytr, Xva_bad, yva_shuf, Xte)
+        assert np.allclose(tp_mlp_1, tp_mlp_2, atol=1e-6, rtol=0.0)
+    else:
+        with pytest.raises(ImportError, match="requirements_experiments.txt"):
+            mlp_model({"epochs": 1}, seed=SEED)
 
 
 def test_determinism_and_schema_v2() -> None:
@@ -294,6 +304,13 @@ def test_determinism_and_schema_v2() -> None:
         keys = make_fingerprint_key(full_tr)
         max_f = int(pd.DataFrame({"k": keys, "f": folds_grp}).groupby("k")["f"].nunique().max())
         assert max_f == 1
+
+        if FOLDS10_PATH.exists():
+            folds10_grp = np.load(FOLDS10_PATH)
+            assert folds10_grp.shape == (len(full_tr),)
+            assert set(np.unique(folds10_grp).tolist()) == set(range(10))
+            max_f10 = int(pd.DataFrame({"k": keys, "f": folds10_grp}).groupby("k")["f"].nunique().max())
+            assert max_f10 == 1
 
 
 def test_reproduction_check_v2() -> None:

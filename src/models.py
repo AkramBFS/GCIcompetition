@@ -330,11 +330,17 @@ def mlp_model(
     """Return a deterministic PyTorch CPU (256, 128) MLP fit_predict callable."""
     import time
 
-    import torch
-    import torch.nn as nn
+    try:
+        import torch
+        import torch.nn as nn
+        from torch.utils.data import DataLoader, TensorDataset
+    except ImportError as exc:
+        raise ImportError(
+            "PyTorch is optional and only needed for mlp_model; install requirements_experiments.txt"
+        ) from exc
+
     from sklearn.metrics import roc_auc_score
     from sklearn.preprocessing import QuantileTransformer
-    from torch.utils.data import DataLoader, TensorDataset
 
     cfg: dict[str, Any] = {
         "epochs": 12,

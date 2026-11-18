@@ -37,6 +37,7 @@ MIN_GAIN = max(0.0002, NOISE_FLOOR)
 # Grey-zone customer linkage switch (HARD RULE: must stay False unless explicitly approved)
 ENABLE_LINKAGE: bool = False
 USE_TEST_FOR_STATS: bool = False
+# Constant zero-gain column identified in train.csv (only 1 zero in train, 0 in test; v1 P4 pruning tie 0.000000)
 DROPPED_FEATURES: list[str] = ["FLAG_MOBIL"]
 
 # v1 top-3 Optuna LightGBM parameter sets (from experiments/lgb_top_params.json)
@@ -114,7 +115,8 @@ XGB_FINAL_SEEDS = [42, 1024]
 CAT_FINAL_SEEDS = [42, 1024]
 MLP_FINAL_SEEDS = [42, 1024]
 
-# Selected LightGBM configuration for v2 (Optuna top-3 from experiments/lgb_top_params.json)
+# Selected LightGBM configuration for v2 (v1 Optuna Trial #11 / rank-3 in experiments/lgb_top_params.json,
+# chosen via 5-fold CV on experiments_v2/folds_group.npy in P5)
 LGB_FINAL_PARAMS: dict = dict(LGB_TOP_PARAMS[2])
 
 # Frozen feature views (populated at P4 gate / freeze-features-v2)
@@ -130,6 +132,8 @@ VIEW_C_TE_COLS: tuple[str, ...] = (
     "PRODUCT_CODE",
     "TERM_X_CON",
 )
+# Minimum category count in inner training fold before backing off to global target mean (A4 specification)
 VIEW_C_TE_MIN_COUNT: int = 30
+# Neighborhood size k for pattern-isolated Euclidean KNN target mean (Addendum A.4)
 VIEW_C_KNN_KS: tuple[int, ...] = (500,)
 VIEW_C_KNN_MODE: str = "v2"

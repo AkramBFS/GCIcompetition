@@ -1,8 +1,8 @@
 """One-command deterministic end-to-end v2 training and submission pipeline.
 
-Reproduces the finalized v2 19-model (10 model-view group) ensemble from raw CSVs in input/.
+Reproduces the finalized v2 20-model (10 model-view group) ensemble from raw CSVs in input/.
 Usage:
-    python src/run_all_v2.py                  # Full 19-model pipeline (--full)
+    python src/run_all_v2.py                  # Full 20-model pipeline (--full)
     python src/run_all_v2.py --fast           # Sub-30m LightGBM subset (VIEW_A x3 + VIEW_B x1)
     python src/run_all_v2.py --fresh          # Clear cache before running
     python src/run_all_v2.py --enable-linkage # Grey-zone linkage variant (False by default)
@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
     mode_grp.add_argument(
         "--full",
         action="store_true",
-        help="Full 19-model v2 pipeline (default).",
+        help="Full 20-model v2 pipeline (default).",
     )
     mode_grp.add_argument(
         "--fast",
