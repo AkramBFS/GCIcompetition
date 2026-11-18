@@ -26,6 +26,7 @@ submissions/*.csv
 experiments_v2/*/*.npy
 experiments_v2/logs/
 experiments_v2/run_all_cache*/
+experiments_v2/knn_cache/
 experiments_v2/*.db
 submissions_v2/*.csv
 catboost_info/

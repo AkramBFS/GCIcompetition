@@ -119,3 +119,57 @@ For a sub-hour single-CatBoost-seed verification run (`~35-45 min`):
   - Optuna TPE Sampler & RDB Storage: https://optuna.readthedocs.io/
   - scikit-learn `StratifiedKFold`, `KFold`, `roc_auc_score`: https://scikit-learn.org/
   - SciPy `rankdata`, `spearmanr`: https://docs.scipy.org/
+
+---
+
+# Iteration 2 (`v2`) — Group-Validated Multi-View Pipeline
+
+> **Pre-Registered Improvement Summary:** `blend_final_v2` improves mean 5-fold group-CV AUC from **`0.765179`** (v1 blend scored on `folds_group.npy`) to **`0.766841`** (**`+0.001662`**, **`5/5` folds improved**), with pooled OOF AUC **`0.766777`** (vs v1 `0.765177`).
+
+## 8. v2 Audit, Group Folds & Count Parity (`src/audit_v2.py`)
+
+1. **Customer-Fingerprint & Group Folds (`experiments_v2/folds_group.npy`):**
+   - Repeat-applicant fingerprint `K3 = (CODE_GENDER, round(REGION_POPULATION_RELATIVE, 6), DAYS_BIRTH - DAYS_ID_PUBLISH, round(DAYS_BIRTH - DAYS_REGISTRATION))` has a `0.018%` chance-collision null rate (`< 1%`), identifies `3,472` multi-application rows (`2.028%` of train, `1,748` pairs), and matches `1.933%` of test rows (`1.654%` of validation rows under v1's random `folds.npy`).
+   - Within train multi-row groups, repeat applications exhibit strong label concordance: $P(y=1 \mid \text{other member } y=1) = 0.4151$ vs $P(y=1 \mid \text{other } y=0) = 0.0371$ against the `0.0807` global rate (`5.14x` lift).
+   - **CV Switch:** v2 switches from random `StratifiedKFold` to `StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)` grouped by `K3` (`experiments_v2/folds_group.npy`, max folds per group = `1`, target rate spread `0.000029`), plus a 10-fold `StratifiedGroupKFold` (`experiments_v2/folds10_group.npy`).
+2. **Count-Parity Fix (`F5_LOO`):**
+   - v1's `F5` raw counts included self on train (`>= 1`) while unseen test rows received `0`, yielding a 5-fold adversarial AUC of `0.59309`. Subtracting `1` on train without coarsening high counts created exact off-by-1 separation (`0.93734`).
+   - `F5_LOO` applies leave-self-out (`count - 1`, clipped at `0`) on train and deterministic `quantize_count` (`<10` exact, `10..99` nearest `5`, `>=100` nearest `50`) on both train and test, cutting adversarial AUC to **`0.52464`** (`<= 0.53`) and improving LightGBM CV by **`+0.000792`** (`5/5` folds) on `folds_group.npy`.
+3. **Train-Only Statistics & Grey-Zone Linkage Policy:**
+   - **Train-only statistics:** `USE_TEST_FOR_STATS = False` across the entire v2 pipeline.
+   - **Grey-zone flag (`ENABLE_LINKAGE = False`):** Nested leave-self-out customer-linkage features (`B1`: `FP_GROUP_SIZE_LOO`, `FP_N_PRIOR`, `FP_PRIOR_DEFAULT_RATE`) produced `+0.001428` (`5/5` folds) on v1 random `folds.npy` (where groups leak across folds) vs `-0.000340` (`3/5` folds) on group-isolated `folds_group.npy`. `ENABLE_LINKAGE` remains **`False`** in the shipped v2 submission (`submissions_v2/sub_final_v2.csv`); a standby linkage variant (`submissions_v2/sub_final_v2_linkage.csv`) was built only as an unshipped counterfactual.
+
+## 9. v2 Feature Views, Nested Target Features & Gate Checks
+
+- **Accepted P3 Families on `folds_group.npy` (`EXP_LR = 0.06`, starting from `lgb2_inc = 0.761828`):**
+  1. `F5_LOO` parity-fixed density (`+0.000792` vs raw `F5`, `5/5` folds).
+  2. `A0b` ordinal integer categorical codes for LightGBM (`use_codes=True`, `NaN -> -1`, `+0.000439`, `4/5` folds -> `0.762267`).
+  3. `A1` loan term/rate family (`TERM_MODE` from 25 dominant `CREDIT_TERM` peaks, `TERM_RESID_REL`, `COST_PROXY`, `RATE_PER_PERIOD` via 30-step vectorised bisection, `DOWNPAY_PROXY`, `GOODS_EQ_CREDIT`, `PRODUCT_CODE`, `+0.001199`, `5/5` folds -> `0.763467`).
+  4. `A6_INT` integer age `floor(-DAYS_BIRTH / 365)` (`+0.000601`, `4/5` folds -> `0.764068`).
+- **Frozen Feature Views (`freeze-features-v2`):**
+  - **`VIEW_A` (54 effective cols, adv AUC `0.51703`):** `["F2", "F5_LOO", "F6", "A1", "A6_INT"]` with `use_codes=True`.
+  - **`VIEW_B` (102 effective cols, adv AUC `0.52580`):** `["F0", "F1", "F2", "F3", "F5_LOO", "F6", "A1", "A5", "A6_INT"]` (diverse broad tree view; `F4_LITE` excluded after failing the `<= 0.53` adversarial check).
+  - **`VIEW_C` (61 effective cols):** `VIEW_A` + nested `A4` smoothed interaction target encodings (`OCC_X_ORG`, `EDU_X_INC`, `CON_X_GEN_X_FAM`, `REGION_ID`, `PRODUCT_CODE`, `TERM_X_CON`, `alpha=50`, `min_count=30`) + nested `A3` `k=500` KNN target mean (`mode="v2"` missingness-pattern isolated Euclidean distance over quantile-normal `[EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3, CREDIT_TERM]`, falling back to global `v1` when pattern count `< 3,000`).
+- **Nested Isolation & Permuted-Label Gate:**
+  - Every target-derived feature (`F6` TE, `A4` TE combos, `A3` KNN target mean, `B1` linkage) is computed strictly nested inside each outer CV fold (training rows exclude self via inner deterministic 5-fold KFold or exact row-index exclusion; validation/test rows query only the outer training split). Verified via label-shuffle and single-row label-flip unit tests in `tests/test_pipeline_v2.py`.
+  - **Permuted-label gate test (`lgb2_gate_permuted_y_fixed300`, fixed `n_estimators=300` without early-stopping validation peeking):** pooled OOF AUC = **`0.500894`** (`[0.494907, 0.495749, 0.502668, 0.508644, 0.503385]`), inside `[0.495, 0.505]`. *(Note: running early stopping on random validation labels induces ~`+0.005` upward selection bias even on the raw 32 columns, which scored `0.506547` vs `VIEW_A`'s `0.506376`.)*
+
+## 10. v2 Model Suite, Honest Blend-CV & Reproducibility
+
+- **Final Ensemble (`blend_final_v2`, 10 model-view groups / 20 models, equal-weight fold-isolated rank average):**
+  - `LGB_VIEW_A` (3 seeds `42, 1024, 2025`, Optuna top-3 `lr=0.02`, pooled `0.765648`), `LGB_VIEW_B` (3 seeds, `0.764476`), `LGB_VIEW_C` (3 seeds, `0.765653`), `LGB_VIEW_A_10F` (10-fold LightGBM, `0.765708`, `+0.000370` over 5-fold), `XGB_VIEW_A` (2 seeds, `0.764770`), `XGB_VIEW_B` (2 seeds, `0.763538`), `XGB_VIEW_C` (2 seeds, `0.764298`), `CAT_VIEW_A` (2 fast seeds `lr=0.06, depth=6, border_count=128`, `0.764087`), `CAT_VIEW_B` (`0.762397`), `CAT_VIEW_C` (`0.761534`).
+  - *Rejected from blend under pre-registered rules:* binned L2 `LogisticRegression` (best `C=0.01`, `0.754377`, `-0.000030` blend gain), PyTorch CPU 2-layer `(256, 128)` `MLP` (`0.747779` 2-seed, `-0.000162` blend gain), native-categorical LightGBM (`0.756174`), and `lr=0.01` LightGBM (`+0.000078 < +0.0003`).
+  - *Honest Blend-CV stacker selection:* On the 10 admitted groups, `equal_rank` scored **`0.766841`** mean fold AUC (`0.766777` pooled OOF). `meta_top2` (`0.767103`, `+0.000262`, `4/5` folds) and `logreg_c0.01` (`0.767094`, `+0.000254`, `4/5` folds) fell short of the `+0.0003` complexity gate, so `equal_rank` was retained.
+- **Seeds, Versions, Runtimes & Tolerances:**
+  - Seeds: global `42`; LightGBM `[42, 1024, 2025]`; XGBoost/CatBoost `[42, 1024]`; `PYTHONHASHSEED=42`; LightGBM `deterministic=True, force_row_wise=True`; `N_THREADS = 3` (2 physical / 4 logical cores).
+  - Pinned environment in `requirements_v2.txt` (adds `torch==2.15.0+cpu` via `--extra-index-url https://download.pytorch.org/whl/cpu`).
+  - Expected runtimes: `--fast` (4 LightGBM models, `0.765773` pooled OOF) **`~25.5–27 min`** (`1530.8s` / `1628.6s`, bit-identical SHA256 across fresh runs); `--full` (20 models from scratch) **`~5.1 hours`** (`~63 min` when resuming cached components).
+  - Cross-machine thread tolerance (`lgb_v2_viewA_s42` with `2` vs `3` vs `4` threads): **`0.000000`** AUC difference.
+- **Reproduce & Package v2:**
+  ```powershell
+  .\.venv\Scripts\python.exe -m pip install -r requirements_v2.txt
+  .\.venv\Scripts\python.exe src/run_all_v2.py --full
+  .\.venv\Scripts\python.exe -m pytest tests/test_pipeline.py tests/test_pipeline_v2.py -v
+  .\.venv\Scripts\python.exe make_zip_v2.py
+  ```
+- **Idea-Source Credits (v2):** All code was implemented independently from scratch; feature-engineering and validation ideas were inspired by the Kaggle Home Credit 1st-place team's post-mortem write-up (feature restriction, implied annuity interest rates, KNN target features, neural net vs GBDT gap, stacking expectations), public Kaggle Home Credit write-ups (EXT/credit ratios and annuity-term peaks), and a public GCI competition repository README's structured experiment discipline.

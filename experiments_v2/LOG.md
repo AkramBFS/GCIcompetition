@@ -248,3 +248,21 @@
 - `meta_top3`: mean `0.766959` (+/- 0.005200) | pooled `0.766830` | vs equal `+0.000119` (`4/5` folds)
 - **Selected Final Blend Method:** **`equal_rank`** (mean fold `0.766841`, pooled `0.766777`).
 - **v2 Blend vs v1 Blend (on `folds_group.npy`):** `0.765179` -> **`0.766841`** (`+0.001662`, `5/5` folds improved)
+
+## Phase P7: Reproducible Package, Verification & Zip
+- **Start UTC:** `2026-11-18T20:03:00Z`
+- **Thread-Count Tolerance Check (`lgb_v2_viewA_s42`, `deterministic=True`, `force_row_wise=True`):**
+  - `2` threads: mean `0.765439`, pooled `0.765338` (`339.4s`)
+  - `3` threads: mean `0.765439`, pooled `0.765338` (`354.8s`)
+  - `4` threads: mean `0.765439`, pooled `0.765338` (`356.3s`)
+  - Cross-machine `2 vs 4` thread tolerance: **`0.000000`** AUC difference.
+- **`--fast --fresh` Determinism Check (2 independent runs from scratch):**
+  - Run 1 (`1530.8s`, 25.5 min): pooled `0.765773`, mean `0.765830`, SHA256 `60bd178560f83dd5589dfb53658237ac0fc12a580fae13b5bb807c48e9060780`
+  - Run 2 (`1628.6s`, 27.1 min): pooled `0.765773`, mean `0.765830`, SHA256 `60bd178560f83dd5589dfb53658237ac0fc12a580fae13b5bb807c48e9060780`
+  - Bit-identical: **`True`**.
+- **Fresh-Venv Verification (`.venv_verify_v2` built from `requirements_v2.txt`):**
+  - Executed `src/run_all_v2.py --full` (`lgb_v2_viewA_s42`, `xgb_v2_viewA_s42`, and `cat_v2_viewC_fast_s42` + nested KNN v2 trained from scratch; 17 SHA256-cached components verified).
+  - Reproduced Fold AUCs: `[0.766895, 0.775647, 0.760755, 0.767735, 0.763171]`
+  - Reproduced Mean Fold AUC: **`0.766841`** | Pooled OOF AUC: **`0.766777`** (`2.3e-9` difference vs `blend_final_v2` tracker).
+  - Pytest inside `.venv_verify_v2`: **`14 passed in 29.69s`** (7 v1 + 7 v2 tests including `test_reproduction_check_v2`).
+- **End UTC:** `2026-11-18T22:38:16Z` (**26.36 h** remaining before Nov 20 01:00 UTC deadline).

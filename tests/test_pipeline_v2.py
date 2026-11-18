@@ -275,7 +275,19 @@ def test_determinism_and_schema_v2() -> None:
     assert np.allclose(tp1, tp2, atol=1e-6, rtol=0.0)
 
     if FOLDS_GROUP_PATH.exists() and (INPUT_DIR / "train.csv").exists():
-        full_tr = pd.read_csv(INPUT_DIR / "train.csv", usecols=["TARGET", "CODE_GENDER", "REGION_POPULATION_RELATIVE", "DAYS_BIRTH", "DAYS_ID_PUBLISH", "DAYS_REGISTRATION"])
+        full_tr = pd.read_csv(
+            INPUT_DIR / "train.csv",
+            usecols=[
+                "TARGET",
+                "CODE_GENDER",
+                "REGION_POPULATION_RELATIVE",
+                "DAYS_BIRTH",
+                "DAYS_EMPLOYED",
+                "DAYS_ID_PUBLISH",
+                "DAYS_REGISTRATION",
+                "DAYS_LAST_PHONE_CHANGE",
+            ],
+        )
         folds_grp = np.load(FOLDS_GROUP_PATH)
         assert folds_grp.shape == (len(full_tr),)
         assert set(np.unique(folds_grp).tolist()) == {0, 1, 2, 3, 4}
