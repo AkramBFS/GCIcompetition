@@ -231,3 +231,40 @@ def test_submission_validator(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         bad_ids = test_df.iloc[::-1].copy()
         write_submission(bad_ids, valid_preds, tmp_path / "bad_ids.csv")
+
+
+def test_reproduction_check() -> None:
+    """7. Verify run_all.py OOF AUC matches tracker blend_final and sub_final rank-correlates >= 0.999."""
+    import json
+    from scipy.stats import spearmanr
+
+    sub_final_csv = ROOT_DIR / "submissions" / "sub_final.csv"
+    sub_final_json = ROOT_DIR / "submissions" / "sub_final.json"
+    sub_blend_csv = ROOT_DIR / "submissions" / "sub_03_blend.csv"
+    tracker_csv = ROOT_DIR / "experiments" / "tracker.csv"
+
+    if not sub_final_csv.exists() or not sub_final_json.exists():
+        pytest.skip("sub_final artifacts not generated yet (run src/run_all.py first)")
+
+    sample_sub = pd.read_csv(INPUT_DIR / "sample_submission.csv")
+    final_df = pd.read_csv(sub_final_csv)
+    assert final_df.shape == sample_sub.shape
+    assert list(final_df.columns) == list(sample_sub.columns)
+    assert np.array_equal(final_df["SK_ID_CURR"].to_numpy(), sample_sub["SK_ID_CURR"].to_numpy())
+    assert not final_df["TARGET"].isna().any()
+    assert ((final_df["TARGET"] >= 0.0) & (final_df["TARGET"] <= 1.0)).all()
+
+    meta = json.loads(sub_final_json.read_text(encoding="utf-8"))
+    run_all_auc = float(meta["pooled_oof_auc"])
+    assert run_all_auc < 0.78
+
+    tracker_df = pd.read_csv(tracker_csv)
+    blend_rows = tracker_df.loc[tracker_df["name"] == "blend_final"]
+    assert len(blend_rows) >= 1
+    tracker_auc = float(blend_rows.iloc[-1]["pooled_oof_auc"])
+    assert abs(run_all_auc - tracker_auc) <= 0.0002
+
+    blend_df = pd.read_csv(sub_blend_csv)
+    corr = float(spearmanr(final_df["TARGET"], blend_df["TARGET"]).statistic)
+    assert corr >= 0.999
+

@@ -189,3 +189,16 @@ Deadline: **2026-11-20 01:00:00 UTC**
   - Coarse 0.1 weight grid search best `(0.3, 0.4, 0.3)`: `0.765203` (`+0.000026` over equal weights, `3/5` folds improved) -> **REJECT** unequal weights (`< 0.0002` threshold); keep equal family weights `(1/3, 1/3, 1/3)`.
 - **Submission:** `submissions/sub_03_blend.csv` (+ `.json`) validated against `sample_submission.csv`.
 - **Gate P8:** PASSED (`blend_final` saved to `experiments/blend_final/` and `tracker.csv`).
+
+---
+
+### P9: Final Reproducible Package, Fresh-Venv Verification & Zip
+- **Start UTC:** `2026-11-17T23:38:00Z`
+- **Fresh-Venv Reproduction (`requirements.txt` -> `.venv_verify` -> `python src/run_all.py`):**
+  - Wall time: `8626.6s` (2h 23m 46s) across all 7 models (`lgb_s42/1024/2025`, `cat_s42/1024`, `xgb_s42/1024`).
+  - Reproduced Fold AUCs: `[0.762728, 0.766599, 0.770005, 0.761713, 0.764984]`
+  - Reproduced Mean Fold AUC: **`0.765206`** | Pooled OOF AUC: **`0.765177`** (`0.000000` difference vs `blend_final` in `tracker.csv`).
+  - Spearman rank correlation (`submissions/sub_final.csv` vs `submissions/sub_03_blend.csv`): **`0.999999999981`** (max absolute difference `4.44e-16`).
+- **Verification (`pytest tests/test_pipeline.py -v`):** **`7 passed in 23.51s`** (including `test_reproduction_check`).
+- **End UTC:** `2026-11-18T02:16:45Z` (ahead of Nov 20, 01:00 UTC deadline).
+- **Gate P9:** PASSED (`README.md`, `competition_code.zip`, `submissions/sub_final.csv`, tagged `final`).

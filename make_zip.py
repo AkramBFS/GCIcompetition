@@ -50,7 +50,7 @@ def build_zip(output_path: Path = ZIP_PATH) -> Path:
             if p.exists():
                 files_to_pack.append(p)
         for sub in sorted(exp_dir.iterdir()):
-            if sub.is_dir() and sub.name != "logs":
+            if sub.is_dir() and sub.name not in ("logs", "run_all_cache", "run_all_cache_fast"):
                 for fname in ("meta.json", "importance.csv"):
                     fp = sub / fname
                     if fp.exists():
