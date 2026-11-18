@@ -64,3 +64,19 @@
 - **Result (`lgb2_a0b_codes`, 44 cols, vs `lgb2_inc`):**
   - Fold AUCs: `[0.762555, 0.771595, 0.756114, 0.763139, 0.757934]` | Mean: **`0.762267`** | Pooled: `0.762141`
   - Delta vs `lgb2_inc`: **`+0.000439`** | Folds improved: `4/5` -> **`KEEP`**
+
+### A3 (`KNN target mean`: nested Quantile-Normal [EXT_1..3, CREDIT_TERM])
+- **Hypothesis (`lgb2_a3_knn500_v1`):** Adding nested `k=500` target mean over global 4D space (`NaN -> 0.0` normal median) captures non-axis-aligned interactions among external scores and loan term. Expected: `+0.0003` to `+0.0020`.
+- **Hypothesis (`lgb2_a3_knn500_v2`):** Restricting `k=500` neighbours to identical EXT missingness patterns (fallback to V1 if `<3,000` train rows) avoids artificial median distances on missing scores. Expected: `+0.0004` to `+0.0022`.
+- **Result (`lgb2_a3_knn500_v1`, 44 cols, vs `lgb2_a0b_codes`):**
+  - Fold AUCs: `[0.762587, 0.770571, 0.756232, 0.761511, 0.757346]` | Mean: **`0.761649`** | Pooled: `0.761569`
+  - Delta vs `lgb2_a0b_codes`: **`-0.000618`** | Folds improved: `2/5` -> **`REJECT`** (V1 global pool)
+- **Result (`lgb2_a3_knn500_v2`, 44 cols, vs `lgb2_a0b_codes`):**
+  - Fold AUCs: `[0.762167, 0.770479, 0.756939, 0.762321, 0.757378]` | Mean: **`0.761857`** | Pooled: `0.761713`
+  - Delta vs `lgb2_a0b_codes`: **`-0.000410`** | Folds improved: `1/5` -> **`REJECT`** (V2 pattern-isolated)
+
+### A1 (`Term/rate family G1`: 7 cols)
+- **Hypothesis (`lgb2_a1_term_rate`):** Adding `TERM_MODE`, `TERM_RESID_REL`, `COST_PROXY`, `RATE_PER_PERIOD` (bisection), `DOWNPAY_PROXY`, `GOODS_EQ_CREDIT`, and `PRODUCT_CODE` exposes implied interest rate and loan product pricing. Expected: `+0.0003` to `+0.0015`.
+- **Result (`lgb2_a1_term_rate`, 51 cols, vs `lgb2_a0b_codes`):**
+  - Fold AUCs: `[0.764257, 0.773159, 0.757392, 0.763815, 0.758712]` | Mean: **`0.763467`** | Pooled: `0.763360`
+  - Delta vs `lgb2_a0b_codes`: **`+0.001199`** | Folds improved: `5/5` -> **`KEEP`**
