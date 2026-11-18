@@ -24,3 +24,18 @@
   - **Engineered Adversarial AUC & Count Parity Fix:** v1 frozen `F2 + F5` adversarial AUC was `0.59309` (`> 0.53`). Naive LOO (`count - 1`) yielded `0.93734` due to constant off-by-1 separation on frequent templates. Adding `F5_LOO` (leave-self-out on train + `quantize_count`: `<10` exact, `10..99` nearest 5, `>=100` nearest 50) reduces adversarial AUC to **`0.52464`** (`<= 0.53` PASS; and `0.52008` when including fold-mapped `F6_TE`).
   - **Profile:** `REGION_POPULATION_RELATIVE` has `81` unique train / `80` test values (80/80 overlap); `AMT_CREDIT == AMT_GOODS_PRICE` is `34.99%` train / `34.65%` test; `CREDIT_TERM` shows 48 clear local peaks (top mode `20.0` at `16,200` rows, `34.1` at `5,757`, `23.5` at `4,841`).
 - **Commit:** P0 + P1 committed cleanly on branch `v2`.
+
+## Phase P2: Incumbent Re-Baseline on `folds_group.npy`
+- **Start UTC:** `2026-11-18T11:58:58Z` (**37.02 h** left)
+- **Hypothesis (`lgb2_v1_f5raw`):** Evaluating v1's frozen feature set (`F2, F5, F6`, `FLAG_MOBIL` dropped, 46 features) on `folds_group.npy` with `LGB_START` (`EXP_LR=0.06`) establishes the group-fold baseline prior to the LOO density parity fix (expected ~`0.7615`).
+- **Hypothesis (`lgb2_inc`):** Replacing `F5` with `F5_LOO` (leave-self-out train counts + `quantize_count` so adversarial AUC drops from `0.59309` to `0.52464`) removes train/test parity bias while retaining loan-template density signal (~`0.0000 +/- 0.0003` vs `lgb2_v1_f5raw`; preferred as cleaner parity-verified incumbent).
+- **Result (`lgb2_v1_f5raw`, 44 features on `folds_group.npy`):**
+  - Fold AUCs: `[0.761350, 0.770297, 0.754673, 0.762041, 0.756817]` (mean best iter `380.4`)
+  - Mean Fold AUC: `0.761036` (`+/- 0.005388`) | Pooled OOF AUC: `0.761015`
+- **Result (`lgb2_inc`, 44 features with `F5_LOO` on `folds_group.npy`):**
+  - Fold AUCs: `[0.761475, 0.771278, 0.755634, 0.763283, 0.757470]` (mean best iter `359.0`)
+  - Mean Fold AUC: **`0.761828`** (`+/- 0.005457`) | Pooled OOF AUC: **`0.761748`**
+  - Compare `lgb2_inc` vs `lgb2_v1_f5raw`: **`+0.000792`** mean fold AUC, **`5/5`** folds improved -> **KEEP** (new incumbent: `lgb2_inc`, active families: `["F2", "F5_LOO", "F6"]`).
+- **v1 `blend_final` OOF Evaluated on `folds_group.npy` (stored `experiments/blend_final/oof.npy`):**
+  - On `experiments/folds.npy`: `[0.762728, 0.766599, 0.770005, 0.761713, 0.764984]`, mean `0.765206`, pooled `0.765177`.
+  - On `experiments_v2/folds_group.npy`: `[0.765393, 0.774380, 0.760458, 0.765747, 0.759917]`, mean **`0.765179`**, pooled **`0.765177`**.

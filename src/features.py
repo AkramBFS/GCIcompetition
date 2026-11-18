@@ -431,6 +431,79 @@ def _add_f5(
     return tr, te
 
 
+def quantize_count(arr: np.ndarray | pd.Series) -> np.ndarray:
+    """Coarsen high-frequency counts to avoid exact off-by-1 train-vs-test split separation."""
+    s = np.asarray(arr, dtype=np.float64)
+    return np.where(
+        s < 10.0,
+        s,
+        np.where(s < 100.0, np.round(s / 5.0) * 5.0, np.round(s / 50.0) * 50.0),
+    ).astype(np.float32)
+
+
+def _add_f5_loo(
+    tr: pd.DataFrame,
+    te: pd.DataFrame,
+    use_test_for_stats: bool,
+    skipped: list[str],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """F5_LOO: Leave-self-out loan-structure density counts with parity quantization."""
+    tr_term_r = _credit_term(tr).round(1)
+    te_term_r = _credit_term(te).round(1)
+
+    tr_keys = pd.DataFrame(
+        {
+            "AMT_CREDIT": tr["AMT_CREDIT"],
+            "AMT_ANNUITY": tr["AMT_ANNUITY"],
+            "AMT_GOODS_PRICE": tr["AMT_GOODS_PRICE"],
+            "TERM_R": tr_term_r,
+        },
+        index=tr.index,
+    )
+    te_keys = pd.DataFrame(
+        {
+            "AMT_CREDIT": te["AMT_CREDIT"],
+            "AMT_ANNUITY": te["AMT_ANNUITY"],
+            "AMT_GOODS_PRICE": te["AMT_GOODS_PRICE"],
+            "TERM_R": te_term_r,
+        },
+        index=te.index,
+    )
+    ref_keys = (
+        pd.concat([tr_keys, te_keys], ignore_index=True) if use_test_for_stats else tr_keys
+    )
+
+    ca_counts = ref_keys.groupby(["AMT_CREDIT", "AMT_ANNUITY"], dropna=False).size()
+    gp_counts = ref_keys["AMT_GOODS_PRICE"].value_counts(dropna=False)
+    tr_counts = ref_keys["TERM_R"].value_counts(dropna=False)
+
+    tr_ca_idx = pd.MultiIndex.from_frame(tr_keys[["AMT_CREDIT", "AMT_ANNUITY"]])
+    te_ca_idx = pd.MultiIndex.from_frame(te_keys[["AMT_CREDIT", "AMT_ANNUITY"]])
+
+    tr_ca_raw = tr_ca_idx.map(ca_counts).to_numpy(dtype=np.float64, na_value=0.0) - 1.0
+    te_ca_raw = te_ca_idx.map(ca_counts).to_numpy(dtype=np.float64, na_value=0.0)
+    if use_test_for_stats:
+        te_ca_raw = te_ca_raw - 1.0
+    tr["DENSITY_CREDIT_ANNUITY"] = quantize_count(np.clip(tr_ca_raw, 0.0, None))
+    te["DENSITY_CREDIT_ANNUITY"] = quantize_count(np.clip(te_ca_raw, 0.0, None))
+
+    tr_gp_raw = tr_keys["AMT_GOODS_PRICE"].map(gp_counts).fillna(0.0).to_numpy(dtype=np.float64) - 1.0
+    te_gp_raw = te_keys["AMT_GOODS_PRICE"].map(gp_counts).fillna(0.0).to_numpy(dtype=np.float64)
+    if use_test_for_stats:
+        te_gp_raw = te_gp_raw - 1.0
+    tr["DENSITY_GOODS_PRICE"] = quantize_count(np.clip(tr_gp_raw, 0.0, None))
+    te["DENSITY_GOODS_PRICE"] = quantize_count(np.clip(te_gp_raw, 0.0, None))
+
+    tr_tr_raw = tr_keys["TERM_R"].map(tr_counts).fillna(0.0).to_numpy(dtype=np.float64) - 1.0
+    te_tr_raw = te_keys["TERM_R"].map(tr_counts).fillna(0.0).to_numpy(dtype=np.float64)
+    if use_test_for_stats:
+        te_tr_raw = te_tr_raw - 1.0
+    tr["DENSITY_CREDIT_TERM_ROUND"] = quantize_count(np.clip(tr_tr_raw, 0.0, None))
+    te["DENSITY_CREDIT_TERM_ROUND"] = quantize_count(np.clip(te_tr_raw, 0.0, None))
+
+    return tr, te
+
+
 def build_features(
     train: pd.DataFrame,
     test: pd.DataFrame,
@@ -457,7 +530,9 @@ def build_features(
         tr, te = _add_f3(tr, te, skipped)
     if "F4" in fam_set:
         tr, te = _add_f4(tr, te, cat_cols, use_test_for_stats, skipped)
-    if "F5" in fam_set:
+    if "F5_LOO" in fam_set:
+        tr, te = _add_f5_loo(tr, te, use_test_for_stats, skipped)
+    elif "F5" in fam_set:
         tr, te = _add_f5(tr, te, use_test_for_stats, skipped)
 
     if dropped_features:
@@ -484,6 +559,7 @@ def compute_nested_target_encoding(
     Xte: pd.DataFrame,
     cols: tuple[str, ...] = ("ORGANIZATION_TYPE", "OCCUPATION_TYPE"),
     alpha: float = 50.0,
+    min_count: int = 0,
     n_inner_splits: int = 5,
     seed: int = 42,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -511,6 +587,8 @@ def compute_nested_target_encoding(
             in_global = float(in_y.mean())
             df_in = pd.DataFrame({"cat": tr_s.iloc[in_tr_idx].to_numpy(), "y": in_y})
             stats = df_in.groupby("cat")["y"].agg(["count", "sum"])
+            if min_count > 0:
+                stats = stats[stats["count"] >= min_count]
             enc_map = ((stats["sum"] + alpha * in_global) / (stats["count"] + alpha)).to_dict()
             oof_vals[in_va_idx] = (
                 tr_s.iloc[in_va_idx].map(enc_map).fillna(in_global).to_numpy(dtype=np.float32)
@@ -518,6 +596,8 @@ def compute_nested_target_encoding(
 
         full_df = pd.DataFrame({"cat": tr_s.to_numpy(), "y": y_arr})
         full_stats = full_df.groupby("cat")["y"].agg(["count", "sum"])
+        if min_count > 0:
+            full_stats = full_stats[full_stats["count"] >= min_count]
         full_map = (
             (full_stats["sum"] + alpha * global_mean) / (full_stats["count"] + alpha)
         ).to_dict()
@@ -536,13 +616,14 @@ def wrap_fit_predict_with_te(
     ],
     cols: tuple[str, ...] = ("ORGANIZATION_TYPE", "OCCUPATION_TYPE"),
     alpha: float = 50.0,
+    min_count: int = 0,
     n_inner_splits: int = 5,
     seed: int = 42,
 ) -> Callable[
     [pd.DataFrame, np.ndarray, pd.DataFrame, np.ndarray, pd.DataFrame],
     tuple[np.ndarray, np.ndarray, int],
 ]:
-    """Wrap any model fit_predict to inject nested fold-isolated target encodings (F6)."""
+    """Wrap any model fit_predict to inject nested fold-isolated target encodings (F6/A0/A4)."""
 
     def fit_predict(
         Xtr: pd.DataFrame,
@@ -558,6 +639,7 @@ def wrap_fit_predict_with_te(
             Xte,
             cols=cols,
             alpha=alpha,
+            min_count=min_count,
             n_inner_splits=n_inner_splits,
             seed=seed,
         )

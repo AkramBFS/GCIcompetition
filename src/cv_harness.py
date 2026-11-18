@@ -81,9 +81,9 @@ def _validate_features(X: pd.DataFrame, Xte: pd.DataFrame, y: np.ndarray, folds:
     assert len(X) == len(y) == len(folds), "Row count mismatch among X, y, and folds"
 
 
-def _append_tracker(row: dict[str, Any]) -> None:
-    """Append a single experiment summary row to experiments/tracker.csv."""
-    TRACKER_PATH.parent.mkdir(parents=True, exist_ok=True)
+def _append_tracker(row: dict[str, Any], tracker_path: Path = TRACKER_PATH) -> None:
+    """Append a single experiment summary row to a tracker CSV."""
+    tracker_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "name",
         "timestamp_utc",
@@ -100,8 +100,8 @@ def _append_tracker(row: dict[str, Any]) -> None:
         "mean_best_iter",
         "note",
     ]
-    write_header = not TRACKER_PATH.exists()
-    with TRACKER_PATH.open("a", newline="", encoding="utf-8") as f:
+    write_header = not tracker_path.exists()
+    with tracker_path.open("a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         if write_header:
             writer.writeheader()
@@ -119,10 +119,12 @@ def run_cv(
     Xte: pd.DataFrame,
     folds: np.ndarray,
     note: str = "",
+    exp_dir: Path = EXP_DIR,
+    tracker_path: Path = TRACKER_PATH,
 ) -> dict[str, Any]:
     """Run fixed-fold CV, refuse overwrites, persist predictions/meta, and log to tracker."""
     _validate_features(X, Xte, y, folds)
-    exp_path = EXP_DIR / name
+    exp_path = exp_dir / name
     if exp_path.exists():
         raise FileExistsError(
             f"Experiment '{name}' already exists at {exp_path}. Overwriting is prohibited."
@@ -212,7 +214,7 @@ def run_cv(
     }
     for idx, val in enumerate(fold_aucs):
         tracker_row[f"fold_{idx}_auc"] = f"{val:.6f}"
-    _append_tracker(tracker_row)
+    _append_tracker(tracker_row, tracker_path=tracker_path)
 
     print(
         f"[{name}] DONE | mean_fold_auc={mean_fold_auc:.6f} (+/- {std_fold_auc:.6f}) | "
@@ -222,9 +224,9 @@ def run_cv(
     return meta
 
 
-def load_experiment_meta(name: str) -> dict[str, Any]:
+def load_experiment_meta(name: str, exp_dir: Path = EXP_DIR) -> dict[str, Any]:
     """Read meta.json for a saved experiment."""
-    meta_path = EXP_DIR / name / "meta.json"
+    meta_path = exp_dir / name / "meta.json"
     if not meta_path.exists():
         raise FileNotFoundError(f"Experiment metadata not found: {meta_path}")
     return json.loads(meta_path.read_text(encoding="utf-8"))
@@ -235,10 +237,11 @@ def compare(
     ref: str,
     min_gain: float = 0.0002,
     min_folds: int = 4,
+    exp_dir: Path = EXP_DIR,
 ) -> dict[str, Any]:
     """Compare paired per-fold AUCs of `new` vs `ref` and return keep/reject verdict."""
-    m_new = load_experiment_meta(new)
-    m_ref = load_experiment_meta(ref)
+    m_new = load_experiment_meta(new, exp_dir=exp_dir)
+    m_ref = load_experiment_meta(ref, exp_dir=exp_dir)
     aucs_new = m_new["fold_aucs"]
     aucs_ref = m_ref["fold_aucs"]
     diffs = [a - b for a, b in zip(aucs_new, aucs_ref)]
@@ -278,6 +281,7 @@ def compare(
 def rank_blend_arrays(
     names: list[str],
     weights: list[float] | None = None,
+    exp_dir: Path = EXP_DIR,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compute rank-averaged OOF and test arrays across saved experiments."""
     if not names:
@@ -293,8 +297,8 @@ def rank_blend_arrays(
     oof_blend = None
     test_blend = None
     for name, wi in zip(names, w):
-        oof_arr = np.load(EXP_DIR / name / "oof.npy")
-        test_arr = np.load(EXP_DIR / name / "test.npy")
+        oof_arr = np.load(exp_dir / name / "oof.npy")
+        test_arr = np.load(exp_dir / name / "test.npy")
         oof_rank = rankdata(oof_arr) / len(oof_arr)
         test_rank = rankdata(test_arr) / len(test_arr)
         oof_blend = wi * oof_rank if oof_blend is None else oof_blend + wi * oof_rank
@@ -307,11 +311,69 @@ def rank_blend(
     names: list[str],
     y: np.ndarray,
     weights: list[float] | None = None,
+    exp_dir: Path = EXP_DIR,
 ) -> tuple[float, np.ndarray]:
     """Return pooled OOF AUC and blended test ranks across saved experiments."""
-    oof_blend, test_blend = rank_blend_arrays(names, weights=weights)
+    oof_blend, test_blend = rank_blend_arrays(names, weights=weights, exp_dir=exp_dir)
     auc = float(roc_auc_score(y, oof_blend))
     return auc, test_blend
+
+
+def load_data_v2() -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray, np.ndarray]:
+    """Load train, test, target vector y, and fixed v2 group CV folds."""
+    from src.config_v2 import FOLDS_PATH as V2_FOLDS_PATH
+
+    if not V2_FOLDS_PATH.exists():
+        raise FileNotFoundError(
+            f"v2 folds file missing at {V2_FOLDS_PATH}. Run `python src/audit_v2.py` first."
+        )
+    train = pd.read_csv(INPUT_DIR / "train.csv")
+    test = pd.read_csv(INPUT_DIR / "test.csv")
+    y = train["TARGET"].to_numpy(dtype=np.int32)
+    folds = np.load(V2_FOLDS_PATH)
+    if len(folds) != len(train):
+        raise ValueError(f"v2 folds length {len(folds)} != train length {len(train)}")
+    return train, test, y, folds
+
+
+def run_cv_v2(
+    name: str,
+    fit_predict: Callable[
+        [pd.DataFrame, np.ndarray, pd.DataFrame, np.ndarray, pd.DataFrame],
+        tuple[np.ndarray, np.ndarray, int],
+    ],
+    X: pd.DataFrame,
+    y: np.ndarray,
+    Xte: pd.DataFrame,
+    folds: np.ndarray,
+    note: str = "",
+) -> dict[str, Any]:
+    """Run fixed-fold CV saving artifacts into experiments_v2/."""
+    from src.config_v2 import EXP_DIR as V2_EXP_DIR, TRACKER_PATH as V2_TRACKER_PATH
+
+    return run_cv(
+        name=name,
+        fit_predict=fit_predict,
+        X=X,
+        y=y,
+        Xte=Xte,
+        folds=folds,
+        note=note,
+        exp_dir=V2_EXP_DIR,
+        tracker_path=V2_TRACKER_PATH,
+    )
+
+
+def compare_v2(
+    new: str,
+    ref: str,
+    min_gain: float = 0.0002,
+    min_folds: int = 4,
+) -> dict[str, Any]:
+    """Compare two experiments stored in experiments_v2/."""
+    from src.config_v2 import EXP_DIR as V2_EXP_DIR
+
+    return compare(new=new, ref=ref, min_gain=min_gain, min_folds=min_folds, exp_dir=V2_EXP_DIR)
 
 
 def _git_short_hash() -> str:
