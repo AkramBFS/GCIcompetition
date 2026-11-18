@@ -80,3 +80,22 @@
 - **Result (`lgb2_a1_term_rate`, 51 cols, vs `lgb2_a0b_codes`):**
   - Fold AUCs: `[0.764257, 0.773159, 0.757392, 0.763815, 0.758712]` | Mean: **`0.763467`** | Pooled: `0.763360`
   - Delta vs `lgb2_a0b_codes`: **`+0.001199`** | Folds improved: `5/5` -> **`KEEP`**
+
+### A5 (`div_ext`: 18 ratios of amounts/age/emp by EXT scores, Rule A.3)
+- **Hypothesis (`lgb2_a5_divext`):** Dividing `AMT_CREDIT`, `AMT_ANNUITY`, `AMT_INCOME_TOTAL`, `AMT_GOODS_PRICE`, `AGE_YEARS`, `EMPLOYED_MAG` by `EXT_SOURCE_3`, `EXT_SOURCE_2`, `EXT_MEAN` directly highlights high-debt / low-external-score risk (`>= +0.0002`, `>= 4/5` folds at ff=0.35 or ff=0.60).
+- **Result (`lgb2_a5_divext_ff35`, 69 cols, vs `lgb2_a1_term_rate`):**
+  - Fold AUCs: `[0.763767, 0.770606, 0.757010, 0.762795, 0.758476]` | Mean: **`0.762531`** | Pooled: `0.762485`
+  - Delta vs `lgb2_a1_term_rate`: **`-0.000936`** | Folds improved: `0/5` -> **`REJECT`** (Rule A.3 ff=0.35)
+- **Result (`lgb2_a5_divext_ff60`, 69 cols, vs `lgb2_a1_term_rate_ff60`):**
+  - Fold AUCs: `[0.762652, 0.771111, 0.757519, 0.763164, 0.757743]` | Mean: **`0.762438`** | Pooled: `0.762323`
+  - Delta vs `lgb2_a1_term_rate_ff60`: **`-0.000653`** | Folds improved: `1/5` -> **`REJECT`** (Rule A.3 ff=0.60)
+- **Rule A.3 Verdict (`A5`):** REJECTED at both ff=0.35 and ff=0.60.
+
+### A6 (`age_int`: integer age in years)
+- **Hypothesis (`lgb2_a6a_age_int` / `lgb2_a6b_age_cat`):** Adding `floor(-DAYS_BIRTH / 365)` as an integer or categorical captures discrete age-threshold underwriting rules. Expected: `+0.0001` to `+0.0005`.
+- **Result (`lgb2_a6a_age_int`, 52 cols, vs `lgb2_a1_term_rate`):**
+  - Fold AUCs: `[0.765004, 0.773492, 0.757723, 0.763169, 0.760951]` | Mean: **`0.764068`** | Pooled: `0.763981`
+  - Delta vs `lgb2_a1_term_rate`: **`+0.000601`** | Folds improved: `4/5` -> **`KEEP`**
+- **Result (`lgb2_a6b_age_cat`, 52 cols, vs `lgb2_a1_term_rate`):**
+  - Fold AUCs: `[0.765004, 0.773492, 0.757723, 0.763169, 0.760951]` | Mean: **`0.764068`** | Pooled: `0.763981`
+  - Delta vs `lgb2_a1_term_rate`: **`+0.000601`** | Folds improved: `4/5` -> **`KEEP`**
