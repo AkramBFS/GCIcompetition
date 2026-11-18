@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Callable, Iterable
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import QuantileTransformer
 
 from src.cv_harness import align_categories
+
+_DOMINANT_TERM_MODES = np.array(
+    [
+        8.4, 9.2, 9.4, 10.1, 12.6, 13.7, 14.9, 15.6, 16.5, 17.3,
+        18.4, 19.5, 20.0, 20.7, 21.3, 22.6, 23.5, 25.1, 26.3, 27.7,
+        30.1, 30.8, 34.1, 36.4, 37.8,
+    ],
+    dtype=np.float64,
+)
 
 _BUREAU_CANDIDATES = (
     "AMT_REQ_CREDIT_BUREAU_HOUR",
@@ -504,6 +517,268 @@ def _add_f5_loo(
     return tr, te
 
 
+def _nearest_term_mode(ct: pd.Series) -> np.ndarray:
+    """Map each row's CREDIT_TERM to the nearest dominant peak from P1(d)."""
+    vals = ct.to_numpy(dtype=np.float64)
+    valid = np.isfinite(vals)
+    out = np.full(len(vals), np.nan, dtype=np.float64)
+    if valid.any():
+        diffs = np.abs(vals[valid, None] - _DOMINANT_TERM_MODES[None, :])
+        idx = np.argmin(diffs, axis=1)
+        out[valid] = _DOMINANT_TERM_MODES[idx]
+    return out
+
+
+def _product_code_series(df: pd.DataFrame) -> pd.Series:
+    """Build PRODUCT_CODE = (AMT_GOODS_PRICE rounded to thousands, TERM_MODE) as string series."""
+    goods = df["AMT_GOODS_PRICE"].to_numpy(dtype=np.float64)
+    ct = _credit_term(df)
+    tmode = _nearest_term_mode(ct)
+    goods_k = np.where(np.isfinite(goods), np.round(goods / 1000.0).astype(np.int64), -1)
+    t_str = np.where(np.isfinite(tmode), np.round(tmode, 1).astype(str), "NA")
+    return pd.Series([f"{g}_{t}" for g, t in zip(goods_k, t_str)], index=df.index, dtype="object")
+
+
+def _solve_rate_per_period(
+    annuity: np.ndarray, principal: np.ndarray, n_periods: np.ndarray
+) -> np.ndarray:
+    """Vectorised 30-step bisection solving r / (1 - (1+r)^(-n)) = annuity / principal."""
+    out = np.full(len(annuity), np.nan, dtype=np.float64)
+    valid = (
+        np.isfinite(annuity)
+        & np.isfinite(principal)
+        & np.isfinite(n_periods)
+        & (annuity > 0.0)
+        & (principal > 0.0)
+        & (n_periods > 1.0)
+    )
+    if not valid.any():
+        return out
+
+    target = annuity[valid] / principal[valid]
+    n = n_periods[valid]
+
+    def _annuity_factor(r: np.ndarray) -> np.ndarray:
+        small = np.abs(r) < 1e-8
+        r_safe = np.where(small, 1e-8, r)
+        factor = r_safe / (1.0 - np.power(1.0 + r_safe, -n))
+        limit = (1.0 / n) + r * (n + 1.0) / (2.0 * n)
+        return np.where(small, limit, factor)
+
+    lo = np.full(len(target), -0.15, dtype=np.float64)
+    hi = np.full(len(target), 0.50, dtype=np.float64)
+    f_lo = _annuity_factor(lo) - target
+    f_hi = _annuity_factor(hi) - target
+    bracketed = (f_lo <= 0.0) & (f_hi >= 0.0)
+
+    if bracketed.any():
+        l_b = lo[bracketed].copy()
+        h_b = hi[bracketed].copy()
+        t_b = target[bracketed]
+        n_b = n[bracketed]
+
+        def _f_b(r: np.ndarray) -> np.ndarray:
+            small = np.abs(r) < 1e-8
+            r_safe = np.where(small, 1e-8, r)
+            factor = r_safe / (1.0 - np.power(1.0 + r_safe, -n_b))
+            limit = (1.0 / n_b) + r * (n_b + 1.0) / (2.0 * n_b)
+            return np.where(small, limit, factor) - t_b
+
+        for _ in range(30):
+            mid = 0.5 * (l_b + h_b)
+            f_mid = _f_b(mid)
+            go_right = f_mid < 0.0
+            l_b = np.where(go_right, mid, l_b)
+            h_b = np.where(go_right, h_b, mid)
+        sol = np.full(len(target), np.nan, dtype=np.float64)
+        sol[bracketed] = 0.5 * (l_b + h_b)
+        out[valid] = sol
+    return out
+
+
+def _add_a0_region(
+    tr: pd.DataFrame, te: pd.DataFrame, skipped: list[str]
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """A0: Categorical region identifier derived from REGION_POPULATION_RELATIVE."""
+    if "REGION_POPULATION_RELATIVE" not in tr.columns:
+        skipped.append("A0:REGION_POPULATION_RELATIVE")
+        return tr, te
+    for df in (tr, te):
+        df["REGION_ID"] = df["REGION_POPULATION_RELATIVE"].astype("float64").round(6).astype(str)
+    return tr, te
+
+
+def _add_a1_term_rate(
+    tr: pd.DataFrame, te: pd.DataFrame, skipped: list[str]
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """A1: Loan term mode, residuals, implied annuity interest rate, downpayment proxy, product code."""
+    req = {"AMT_CREDIT", "AMT_ANNUITY", "AMT_GOODS_PRICE"}
+    if not req.issubset(tr.columns):
+        skipped.append("A1:missing_inputs")
+        return tr, te
+
+    for df in (tr, te):
+        ct = _credit_term(df)
+        tmode = _nearest_term_mode(ct)
+        cred = df["AMT_CREDIT"].to_numpy(dtype=np.float64)
+        ann = df["AMT_ANNUITY"].to_numpy(dtype=np.float64)
+        goods = df["AMT_GOODS_PRICE"].to_numpy(dtype=np.float64)
+
+        df["TERM_MODE"] = tmode.astype(np.float32)
+        df["TERM_RESID_REL"] = (safe_div(ct, tmode) - 1.0).astype(np.float32)
+        df["COST_PROXY"] = (safe_div(tmode * ann, cred) - 1.0).astype(np.float32)
+        df["RATE_PER_PERIOD"] = _solve_rate_per_period(ann, cred, tmode).astype(np.float32)
+        df["DOWNPAY_PROXY"] = safe_div(goods - cred, goods)
+        df["GOODS_EQ_CREDIT"] = (df["AMT_GOODS_PRICE"] == df["AMT_CREDIT"]).astype(np.float32)
+        df["PRODUCT_CODE"] = _product_code_series(df)
+    return tr, te
+
+
+def _add_a5_div_ext(
+    tr: pd.DataFrame, te: pd.DataFrame, skipped: list[str]
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """A5: Amount, age, and employment divided by EXT_SOURCE_3, EXT_SOURCE_2, and EXT_MEAN (18 cols)."""
+    if not {"EXT_SOURCE_2", "EXT_SOURCE_3"}.issubset(tr.columns):
+        skipped.append("A5:missing_EXT_SOURCE")
+        return tr, te
+    for df in (tr, te):
+        ext_mean = _ext_mean(df)
+        nums = {
+            "AMT_CREDIT": df["AMT_CREDIT"],
+            "AMT_ANNUITY": df["AMT_ANNUITY"],
+            "AMT_INCOME_TOTAL": df["AMT_INCOME_TOTAL"],
+            "AMT_GOODS_PRICE": df["AMT_GOODS_PRICE"],
+            "AGE_YEARS": _age_years(df),
+            "EMPLOYED_MAG": -_clean_days_employed(df),
+        }
+        dens = {
+            "EXT3": df["EXT_SOURCE_3"],
+            "EXT2": df["EXT_SOURCE_2"],
+            "EXTMEAN": ext_mean,
+        }
+        for xn, xval in nums.items():
+            for en, evals in dens.items():
+                df[f"DIV_{xn}_BY_{en}"] = safe_div(xval, evals)
+    return tr, te
+
+
+def _add_a6_age_int(
+    tr: pd.DataFrame, te: pd.DataFrame, skipped: list[str], as_cat: bool = False
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """A6: Integer age floor(-DAYS_BIRTH / 365) as numeric or categorical."""
+    if "DAYS_BIRTH" not in tr.columns:
+        skipped.append("A6:DAYS_BIRTH")
+        return tr, te
+    for df in (tr, te):
+        age_i = np.floor(-df["DAYS_BIRTH"].astype("float64") / 365.0).astype(np.int32)
+        if as_cat:
+            df["AGE_CAT"] = pd.Series(age_i.astype(str), index=df.index, dtype="object")
+        else:
+            df["AGE_INT"] = age_i.astype(np.float32)
+    return tr, te
+
+
+def _add_f4_lite(
+    tr: pd.DataFrame, te: pd.DataFrame, skipped: list[str]
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """F4_LITE: Capped 12-column LOO peer-relative differences (no FREQ_* counts) for VIEW_B."""
+    tr_aux = pd.DataFrame(index=tr.index)
+    te_aux = pd.DataFrame(index=te.index)
+    for aux, df in ((tr_aux, tr), (te_aux, te)):
+        aux["EXT_MEAN"] = _ext_mean(df).astype("float64")
+        aux["AMT_INCOME_TOTAL"] = df["AMT_INCOME_TOTAL"].astype("float64")
+        aux["CREDIT_TERM"] = _credit_term(df).astype("float64")
+        aux["AGE_YEARS"] = _age_years(df).astype("float64")
+        cleaned = _clean_cat_placeholders(df)
+        aux["ORG"] = cleaned["ORGANIZATION_TYPE"].astype("object")
+        aux["OCC"] = cleaned["OCCUPATION_TYPE"].astype("object")
+        occ = aux["OCC"]
+        edu = cleaned["NAME_EDUCATION_TYPE"].astype("object")
+        pair = occ.astype(str) + "__" + edu.astype(str)
+        aux["OCC_EDU"] = pair.where(~(occ.isna() | edu.isna()), np.nan)
+
+    specs = [
+        ("ORG", ["EXT_MEAN", "AMT_INCOME_TOTAL", "CREDIT_TERM", "AGE_YEARS"], True),
+        ("OCC", ["EXT_MEAN", "AMT_INCOME_TOTAL", "CREDIT_TERM", "AGE_YEARS"], True),
+        ("OCC_EDU", ["EXT_MEAN"], True),
+    ]
+    for g, vals, emit_grp_ext in specs:
+        for v in vals:
+            s = tr_aux[v]
+            valid_v = ~s.isna()
+            df_g = pd.DataFrame({"g": tr_aux[g], "v": s}).loc[valid_v]
+            agg = df_g.groupby("g", dropna=True)["v"].agg(["count", "sum"])
+            agg = agg[agg["count"] >= 30]
+            cnt_map = agg["count"].to_dict()
+            sum_map = agg["sum"].to_dict()
+            full_mean_map = (agg["sum"] / agg["count"]).to_dict()
+
+            tr_cnt = tr_aux[g].map(cnt_map).to_numpy(dtype=np.float64)
+            tr_sum = tr_aux[g].map(sum_map).to_numpy(dtype=np.float64)
+            tr_val = tr_aux[v].to_numpy(dtype=np.float64)
+            # Leave-self-out mean on train rows where val is finite
+            has_val = np.isfinite(tr_val)
+            eff_cnt = np.where(has_val, tr_cnt - 1.0, tr_cnt)
+            eff_sum = np.where(has_val, tr_sum - np.nan_to_num(tr_val, nan=0.0), tr_sum)
+            tr_grp_mean = np.where(eff_cnt >= 29.0, eff_sum / np.where(eff_cnt >= 29.0, eff_cnt, 1.0), np.nan)
+            te_grp_mean = te_aux[g].map(full_mean_map).to_numpy(dtype=np.float64)
+
+            if emit_grp_ext and v == "EXT_MEAN":
+                tr[f"GRP_{g}_EXT_MEAN"] = tr_grp_mean.astype(np.float32)
+                te[f"GRP_{g}_EXT_MEAN"] = te_grp_mean.astype(np.float32)
+            tr[f"{v}_MINUS_GRP_{g}"] = (tr_val - tr_grp_mean).astype(np.float32)
+            te[f"{v}_MINUS_GRP_{g}"] = (te_aux[v].to_numpy(dtype=np.float64) - te_grp_mean).astype(np.float32)
+    return tr, te
+
+
+def build_a7_ratio_candidates(df: pd.DataFrame) -> pd.DataFrame:
+    """Build all pairwise ratios among 12 key numeric columns for A7 discovery screening."""
+    base = pd.DataFrame(
+        {
+            "EXT_SOURCE_1": df["EXT_SOURCE_1"].astype("float64"),
+            "EXT_SOURCE_2": df["EXT_SOURCE_2"].astype("float64"),
+            "EXT_SOURCE_3": df["EXT_SOURCE_3"].astype("float64"),
+            "AMT_CREDIT": df["AMT_CREDIT"].astype("float64"),
+            "AMT_ANNUITY": df["AMT_ANNUITY"].astype("float64"),
+            "AMT_GOODS_PRICE": df["AMT_GOODS_PRICE"].astype("float64"),
+            "AMT_INCOME_TOTAL": df["AMT_INCOME_TOTAL"].astype("float64"),
+            "CREDIT_TERM": _credit_term(df).astype("float64"),
+            "AGE_YEARS": _age_years(df).astype("float64"),
+            "EMPLOYED_MAG": (-_clean_days_employed(df)).astype("float64"),
+            "ID_PUBLISH_MAG": (-df["DAYS_ID_PUBLISH"].astype("float64")),
+            "REGISTRATION_MAG": (-df["DAYS_REGISTRATION"].astype("float64")),
+        },
+        index=df.index,
+    )
+    cols = list(base.columns)
+    out: dict[str, pd.Series] = {}
+    for i in range(len(cols)):
+        for j in range(i + 1, len(cols)):
+            c1, c2 = cols[i], cols[j]
+            out[f"A7_RATIO_{c1}_DIV_{c2}"] = safe_div(base[c1], base[c2])
+    return pd.DataFrame(out, index=df.index)
+
+
+def _add_a7_selected(
+    tr: pd.DataFrame, te: pd.DataFrame, skipped: list[str]
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """A7: Add frozen screened pairwise ratios from experiments_v2/a7_selected_15.json."""
+    sel_path = Path(__file__).resolve().parent.parent / "experiments_v2" / "a7_selected_15.json"
+    if not sel_path.exists():
+        skipped.append("A7:missing_a7_selected_15.json")
+        return tr, te
+    selected = json.loads(sel_path.read_text(encoding="utf-8")).get("selected", [])
+    tr_cand = build_a7_ratio_candidates(tr)
+    te_cand = build_a7_ratio_candidates(te)
+    for col in selected:
+        if col in tr_cand.columns:
+            tr[col] = tr_cand[col]
+            te[col] = te_cand[col]
+        else:
+            skipped.append(f"A7:missing_{col}")
+    return tr, te
+
+
 def build_features(
     train: pd.DataFrame,
     test: pd.DataFrame,
@@ -530,10 +805,24 @@ def build_features(
         tr, te = _add_f3(tr, te, skipped)
     if "F4" in fam_set:
         tr, te = _add_f4(tr, te, cat_cols, use_test_for_stats, skipped)
+    if "F4_LITE" in fam_set:
+        tr, te = _add_f4_lite(tr, te, skipped)
     if "F5_LOO" in fam_set:
         tr, te = _add_f5_loo(tr, te, use_test_for_stats, skipped)
     elif "F5" in fam_set:
         tr, te = _add_f5(tr, te, use_test_for_stats, skipped)
+    if "A0" in fam_set:
+        tr, te = _add_a0_region(tr, te, skipped)
+    if "A1" in fam_set:
+        tr, te = _add_a1_term_rate(tr, te, skipped)
+    if "A5" in fam_set:
+        tr, te = _add_a5_div_ext(tr, te, skipped)
+    if "A6_INT" in fam_set:
+        tr, te = _add_a6_age_int(tr, te, skipped, as_cat=False)
+    if "A6_CAT" in fam_set:
+        tr, te = _add_a6_age_int(tr, te, skipped, as_cat=True)
+    if "A7" in fam_set:
+        tr, te = _add_a7_selected(tr, te, skipped)
 
     if dropped_features:
         drop_cols = [c for c in dropped_features if c in tr.columns]
@@ -550,6 +839,46 @@ def build_features(
     tr, te = align_categories(tr, te)
     build_features.last_skipped_ = skipped  # type: ignore[attr-defined]
     return tr, te
+
+
+def _get_te_series(df: pd.DataFrame, col: str) -> pd.Series | None:
+    """Resolve an existing column or construct virtual A0/A4 interaction keys cleanly."""
+    if col in df.columns:
+        return df[col].astype("object").fillna("__NA__").astype(str)
+    if col == "REGION_ID" and "REGION_POPULATION_RELATIVE" in df.columns:
+        return df["REGION_POPULATION_RELATIVE"].astype("float64").round(6).astype(str)
+    if col == "OCC_X_ORG" and {"OCCUPATION_TYPE", "ORGANIZATION_TYPE"}.issubset(df.columns):
+        a = df["OCCUPATION_TYPE"].astype("object").fillna("__NA__").astype(str)
+        b = df["ORGANIZATION_TYPE"].astype("object").fillna("__NA__").astype(str)
+        return a + "__" + b
+    if col == "EDU_X_INC" and {"NAME_EDUCATION_TYPE", "NAME_INCOME_TYPE"}.issubset(df.columns):
+        a = df["NAME_EDUCATION_TYPE"].astype("object").fillna("__NA__").astype(str)
+        b = df["NAME_INCOME_TYPE"].astype("object").fillna("__NA__").astype(str)
+        return a + "__" + b
+    if col == "CON_X_GEN_X_FAM" and {
+        "NAME_CONTRACT_TYPE",
+        "CODE_GENDER",
+        "NAME_FAMILY_STATUS",
+    }.issubset(df.columns):
+        a = df["NAME_CONTRACT_TYPE"].astype("object").fillna("__NA__").astype(str)
+        b = df["CODE_GENDER"].astype("object").fillna("__NA__").astype(str)
+        c = df["NAME_FAMILY_STATUS"].astype("object").fillna("__NA__").astype(str)
+        return a + "__" + b + "__" + c
+    if col == "PRODUCT_CODE" and {"AMT_GOODS_PRICE", "AMT_CREDIT", "AMT_ANNUITY"}.issubset(df.columns):
+        return _product_code_series(df).astype("object").fillna("__NA__").astype(str)
+    if col == "TERM_X_CON" and {"AMT_CREDIT", "AMT_ANNUITY", "NAME_CONTRACT_TYPE"}.issubset(df.columns):
+        tmode = (
+            df["TERM_MODE"].to_numpy(dtype=np.float64)
+            if "TERM_MODE" in df.columns
+            else _nearest_term_mode(_credit_term(df))
+        )
+        t_str = pd.Series(
+            np.where(np.isfinite(tmode), np.round(tmode, 1).astype(str), "NA"),
+            index=df.index,
+        )
+        con = df["NAME_CONTRACT_TYPE"].astype("object").fillna("__NA__").astype(str)
+        return t_str + "__" + con
+    return None
 
 
 def compute_nested_target_encoding(
@@ -574,12 +903,15 @@ def compute_nested_target_encoding(
     global_mean = float(y_arr.mean())
 
     for col in cols:
-        if col not in Xtr.columns:
+        tr_raw_s = _get_te_series(Xtr, col)
+        if tr_raw_s is None:
             continue
+        va_s = _get_te_series(Xva, col)
+        te_s = _get_te_series(Xte, col)
+        assert va_s is not None and te_s is not None
+
         feat_name = f"TE_{col}"
-        tr_s = Xtr[col].astype("object").fillna("__NA__").astype(str).reset_index(drop=True)
-        va_s = Xva[col].astype("object").fillna("__NA__").astype(str)
-        te_s = Xte[col].astype("object").fillna("__NA__").astype(str)
+        tr_s = tr_raw_s.reset_index(drop=True)
 
         oof_vals = np.full(len(Xtr), global_mean, dtype=np.float32)
         for in_tr_idx, in_va_idx in kf.split(np.arange(len(Xtr))):
@@ -648,6 +980,331 @@ def wrap_fit_predict_with_te(
         if imp is not None:
             fit_predict.last_feature_importances_ = imp  # type: ignore[attr-defined]
             fit_predict.last_feature_names_ = list(tr_te.columns)  # type: ignore[attr-defined]
+        return val_pred, test_pred, best_iter
+
+    return fit_predict
+
+
+def _knn_feature_matrix(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Extract float64 [EXT_1, EXT_2, EXT_3, CREDIT_TERM] matrix and 3-bit EXT missingness pattern."""
+    ct = df["CREDIT_TERM"] if "CREDIT_TERM" in df.columns else _credit_term(df)
+    mat = np.column_stack(
+        [
+            df["EXT_SOURCE_1"].to_numpy(dtype=np.float64),
+            df["EXT_SOURCE_2"].to_numpy(dtype=np.float64),
+            df["EXT_SOURCE_3"].to_numpy(dtype=np.float64),
+            ct.to_numpy(dtype=np.float64),
+        ]
+    )
+    pat = (
+        np.isnan(mat[:, 0]).astype(np.int32) * 4
+        + np.isnan(mat[:, 1]).astype(np.int32) * 2
+        + np.isnan(mat[:, 2]).astype(np.int32)
+    )
+    return mat, pat
+
+
+def compute_nested_knn_target_mean(
+    Xtr: pd.DataFrame,
+    ytr: np.ndarray,
+    Xva: pd.DataFrame,
+    Xte: pd.DataFrame,
+    k_values: tuple[int, ...] = (500,),
+    mode: str = "v1",
+    min_pattern_rows: int = 3000,
+    chunk_size: int = 5000,
+    seed: int = 42,
+    cache_dir: Path | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Compute nested fold-isolated KNN target means in Quantile-Normal [EXT_1..3, CREDIT_TERM] space."""
+    import hashlib
+
+    tr_out = Xtr.copy()
+    va_out = Xva.copy()
+    te_out = Xte.copy()
+
+    y_arr = np.asarray(ytr, dtype=np.float64)
+    raw_tr, pat_tr = _knn_feature_matrix(Xtr)
+    raw_va, pat_va = _knn_feature_matrix(Xva)
+    raw_te, pat_te = _knn_feature_matrix(Xte)
+
+    cache_file: Path | None = None
+    if cache_dir is not None:
+        h = hashlib.sha256()
+        h.update(f"{k_values}|{mode}|{min_pattern_rows}|{seed}".encode("utf-8"))
+        h.update(np.ascontiguousarray(raw_tr).tobytes())
+        h.update(np.ascontiguousarray(raw_va).tobytes())
+        h.update(np.ascontiguousarray(raw_te).tobytes())
+        h.update(np.ascontiguousarray(y_arr).tobytes())
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / f"knn_{h.hexdigest()[:24]}.npz"
+        if cache_file.exists():
+            data = np.load(cache_file)
+            for k in k_values:
+                col_name = f"KNN_EXT_TERM_{k}_MEAN"
+                tr_out[col_name] = data[f"tr_{k}"]
+                va_out[col_name] = data[f"va_{k}"]
+                te_out[col_name] = data[f"te_{k}"]
+            return tr_out, va_out, te_out
+
+    # Fit per-column QuantileTransformer strictly on non-missing training values; NaN -> 0.0 (normal median)
+    Ztr = np.zeros_like(raw_tr, dtype=np.float64)
+    Zva = np.zeros_like(raw_va, dtype=np.float64)
+    Zte = np.zeros_like(raw_te, dtype=np.float64)
+    for j in range(4):
+        obs_tr = np.isfinite(raw_tr[:, j])
+        if obs_tr.sum() >= 2:
+            n_q = min(1000, int(obs_tr.sum()))
+            qt = QuantileTransformer(
+                n_quantiles=n_q,
+                output_distribution="normal",
+                random_state=seed + j,
+                subsample=50000,
+            )
+            qt.fit(raw_tr[obs_tr, j].reshape(-1, 1))
+            Ztr[obs_tr, j] = qt.transform(raw_tr[obs_tr, j].reshape(-1, 1)).ravel()
+            obs_va = np.isfinite(raw_va[:, j])
+            if obs_va.any():
+                Zva[obs_va, j] = qt.transform(raw_va[obs_va, j].reshape(-1, 1)).ravel()
+            obs_te = np.isfinite(raw_te[:, j])
+            if obs_te.any():
+                Zte[obs_te, j] = qt.transform(raw_te[obs_te, j].reshape(-1, 1)).ravel()
+
+    max_k = max(k_values)
+    eff_max_k = min(max_k, max(1, len(Xtr) - 1))
+    tr_res = {k: np.empty(len(Xtr), dtype=np.float32) for k in k_values}
+    va_res = {k: np.empty(len(Xva), dtype=np.float32) for k in k_values}
+    te_res = {k: np.empty(len(Xte), dtype=np.float32) for k in k_values}
+
+    def _query_loo(nn_obj: NearestNeighbors, q_mat: np.ndarray, q_local_idx: np.ndarray, pool_y: np.ndarray, cap_k: int) -> dict[int, np.ndarray]:
+        out_d = {k: np.empty(len(q_mat), dtype=np.float32) for k in k_values}
+        for s in range(0, len(q_mat), chunk_size):
+            e = min(s + chunk_size, len(q_mat))
+            ind = nn_obj.kneighbors(q_mat[s:e], n_neighbors=cap_k + 1, return_distance=False)
+            q_col = q_local_idx[s:e, None]
+            mask = ind != q_col
+            has_self = (~mask).any(axis=1)
+            mask[~has_self, -1] = False
+            neigh = ind[mask].reshape(e - s, cap_k)
+            for k in k_values:
+                kk = min(k, cap_k)
+                out_d[k][s:e] = pool_y[neigh[:, :kk]].mean(axis=1).astype(np.float32)
+        return out_d
+
+    def _query_eval(nn_obj: NearestNeighbors, q_mat: np.ndarray, pool_y: np.ndarray, cap_k: int) -> dict[int, np.ndarray]:
+        out_d = {k: np.empty(len(q_mat), dtype=np.float32) for k in k_values}
+        for s in range(0, len(q_mat), chunk_size):
+            e = min(s + chunk_size, len(q_mat))
+            ind = nn_obj.kneighbors(q_mat[s:e], n_neighbors=cap_k, return_distance=False)
+            for k in k_values:
+                kk = min(k, cap_k)
+                out_d[k][s:e] = pool_y[ind[:, :kk]].mean(axis=1).astype(np.float32)
+        return out_d
+
+    nn_global = NearestNeighbors(n_neighbors=eff_max_k + 1, algorithm="kd_tree", leaf_size=40, n_jobs=1)
+    nn_global.fit(Ztr)
+
+    if mode == "v1":
+        tr_d = _query_loo(nn_global, Ztr, np.arange(len(Ztr)), y_arr, eff_max_k)
+        va_d = _query_eval(nn_global, Zva, y_arr, eff_max_k)
+        te_d = _query_eval(nn_global, Zte, y_arr, eff_max_k)
+        for k in k_values:
+            tr_res[k][:] = tr_d[k]
+            va_res[k][:] = va_d[k]
+            te_res[k][:] = te_d[k]
+    else:
+        # V2: per-missingness-pattern pools when pattern count >= min_pattern_rows; fallback to V1 otherwise
+        fallback_pats: list[int] = []
+        for p in range(8):
+            tr_idx = np.where(pat_tr == p)[0]
+            va_idx = np.where(pat_va == p)[0]
+            te_idx = np.where(pat_te == p)[0]
+            if len(tr_idx) == 0 and len(va_idx) == 0 and len(te_idx) == 0:
+                continue
+            if len(tr_idx) < min_pattern_rows or len(tr_idx) <= eff_max_k:
+                fallback_pats.append(p)
+                continue
+
+            active_dims = [j for j in (0, 1, 2) if ((p >> (2 - j)) & 1) == 0] + [3]
+            nn_p = NearestNeighbors(
+                n_neighbors=eff_max_k + 1, algorithm="kd_tree", leaf_size=40, n_jobs=1
+            )
+            nn_p.fit(Ztr[tr_idx][:, active_dims])
+            y_p = y_arr[tr_idx]
+
+            tr_d = _query_loo(nn_p, Ztr[tr_idx][:, active_dims], np.arange(len(tr_idx)), y_p, eff_max_k)
+            for k in k_values:
+                tr_res[k][tr_idx] = tr_d[k]
+            if len(va_idx) > 0:
+                va_d = _query_eval(nn_p, Zva[va_idx][:, active_dims], y_p, eff_max_k)
+                for k in k_values:
+                    va_res[k][va_idx] = va_d[k]
+            if len(te_idx) > 0:
+                te_d = _query_eval(nn_p, Zte[te_idx][:, active_dims], y_p, eff_max_k)
+                for k in k_values:
+                    te_res[k][te_idx] = te_d[k]
+
+        if fallback_pats:
+            fb_tr = np.where(np.isin(pat_tr, fallback_pats))[0]
+            fb_va = np.where(np.isin(pat_va, fallback_pats))[0]
+            fb_te = np.where(np.isin(pat_te, fallback_pats))[0]
+            if len(fb_tr) > 0:
+                tr_d = _query_loo(nn_global, Ztr[fb_tr], fb_tr, y_arr, eff_max_k)
+                for k in k_values:
+                    tr_res[k][fb_tr] = tr_d[k]
+            if len(fb_va) > 0:
+                va_d = _query_eval(nn_global, Zva[fb_va], y_arr, eff_max_k)
+                for k in k_values:
+                    va_res[k][fb_va] = va_d[k]
+            if len(fb_te) > 0:
+                te_d = _query_eval(nn_global, Zte[fb_te], y_arr, eff_max_k)
+                for k in k_values:
+                    te_res[k][fb_te] = te_d[k]
+
+    save_dict: dict[str, np.ndarray] = {}
+    for k in k_values:
+        col_name = f"KNN_EXT_TERM_{k}_MEAN"
+        tr_out[col_name] = tr_res[k]
+        va_out[col_name] = va_res[k]
+        te_out[col_name] = te_res[k]
+        if cache_file is not None:
+            save_dict[f"tr_{k}"] = tr_res[k]
+            save_dict[f"va_{k}"] = va_res[k]
+            save_dict[f"te_{k}"] = te_res[k]
+    if cache_file is not None and save_dict:
+        np.savez(cache_file, **save_dict)
+    return tr_out, va_out, te_out
+
+
+def wrap_fit_predict_with_knn(
+    base_fit_predict: Callable[
+        [pd.DataFrame, np.ndarray, pd.DataFrame, np.ndarray, pd.DataFrame],
+        tuple[np.ndarray, np.ndarray, int],
+    ],
+    k_values: tuple[int, ...] = (500,),
+    mode: str = "v1",
+    min_pattern_rows: int = 3000,
+    seed: int = 42,
+    cache_dir: Path | None = None,
+) -> Callable[
+    [pd.DataFrame, np.ndarray, pd.DataFrame, np.ndarray, pd.DataFrame],
+    tuple[np.ndarray, np.ndarray, int],
+]:
+    """Wrap any model fit_predict to inject nested fold-isolated KNN target mean features (A3)."""
+
+    def fit_predict(
+        Xtr: pd.DataFrame,
+        ytr: np.ndarray,
+        Xva: pd.DataFrame,
+        yva: np.ndarray,
+        Xte: pd.DataFrame,
+    ) -> tuple[np.ndarray, np.ndarray, int]:
+        tr_k, va_k, te_k = compute_nested_knn_target_mean(
+            Xtr,
+            ytr,
+            Xva,
+            Xte,
+            k_values=k_values,
+            mode=mode,
+            min_pattern_rows=min_pattern_rows,
+            seed=seed,
+            cache_dir=cache_dir,
+        )
+        val_pred, test_pred, best_iter = base_fit_predict(tr_k, ytr, va_k, yva, te_k)
+        imp = getattr(base_fit_predict, "last_feature_importances_", None)
+        if imp is not None:
+            fit_predict.last_feature_importances_ = imp  # type: ignore[attr-defined]
+            fit_predict.last_feature_names_ = list(tr_k.columns)  # type: ignore[attr-defined]
+        return val_pred, test_pred, best_iter
+
+    return fit_predict
+
+
+def _fp_key_from_df(df: pd.DataFrame) -> pd.Series:
+    """Construct K3 customer fingerprint key from feature columns present in X."""
+    g = df["CODE_GENDER"].astype("object").fillna("__NA__").astype(str)
+    reg = df["REGION_POPULATION_RELATIVE"].astype("float64").round(6).astype(str)
+    b_id = (
+        (df["DAYS_BIRTH"].astype("float64") - df["DAYS_ID_PUBLISH"].astype("float64"))
+        .round()
+        .astype("Int64")
+        .astype(str)
+    )
+    b_reg = (
+        (df["DAYS_BIRTH"].astype("float64") - df["DAYS_REGISTRATION"].astype("float64"))
+        .round()
+        .astype("Int64")
+        .astype(str)
+    )
+    return g + "|" + reg + "|" + b_id + "|" + b_reg
+
+
+def compute_nested_linkage_features(
+    Xtr: pd.DataFrame,
+    ytr: np.ndarray,
+    Xva: pd.DataFrame,
+    Xte: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Compute nested leave-self-out fingerprint linkage features (B1, gated by ENABLE_LINKAGE)."""
+    tr_out = Xtr.copy()
+    va_out = Xva.copy()
+    te_out = Xte.copy()
+
+    y_arr = np.asarray(ytr, dtype=np.float64)
+    tr_k = _fp_key_from_df(Xtr)
+    va_k = _fp_key_from_df(Xva)
+    te_k = _fp_key_from_df(Xte)
+
+    stats = pd.DataFrame({"k": tr_k.to_numpy(), "y": y_arr}).groupby("k")["y"].agg(["count", "sum"])
+    cnt_map = stats["count"].to_dict()
+    sum_map = stats["sum"].to_dict()
+
+    tr_cnt = tr_k.map(cnt_map).fillna(0.0).to_numpy(dtype=np.float64)
+    tr_sum = tr_k.map(sum_map).fillna(0.0).to_numpy(dtype=np.float64)
+    loo_cnt = np.clip(tr_cnt - 1.0, 0.0, None)
+    loo_sum = tr_sum - y_arr
+    tr_out["FP_GROUP_SIZE_LOO"] = loo_cnt.astype(np.float32)
+    tr_out["FP_N_PRIOR"] = loo_cnt.astype(np.float32)
+    tr_out["FP_PRIOR_DEFAULT_RATE"] = np.where(
+        loo_cnt >= 1.0, loo_sum / np.where(loo_cnt >= 1.0, loo_cnt, 1.0), np.nan
+    ).astype(np.float32)
+
+    for df_out, keys in ((va_out, va_k), (te_out, te_k)):
+        cnt = keys.map(cnt_map).fillna(0.0).to_numpy(dtype=np.float64)
+        sm = keys.map(sum_map).fillna(0.0).to_numpy(dtype=np.float64)
+        df_out["FP_GROUP_SIZE_LOO"] = cnt.astype(np.float32)
+        df_out["FP_N_PRIOR"] = cnt.astype(np.float32)
+        df_out["FP_PRIOR_DEFAULT_RATE"] = np.where(
+            cnt >= 1.0, sm / np.where(cnt >= 1.0, cnt, 1.0), np.nan
+        ).astype(np.float32)
+
+    return tr_out, va_out, te_out
+
+
+def wrap_fit_predict_with_linkage(
+    base_fit_predict: Callable[
+        [pd.DataFrame, np.ndarray, pd.DataFrame, np.ndarray, pd.DataFrame],
+        tuple[np.ndarray, np.ndarray, int],
+    ],
+) -> Callable[
+    [pd.DataFrame, np.ndarray, pd.DataFrame, np.ndarray, pd.DataFrame],
+    tuple[np.ndarray, np.ndarray, int],
+]:
+    """Wrap any model fit_predict to inject nested B1 customer linkage features (ENABLE_LINKAGE)."""
+
+    def fit_predict(
+        Xtr: pd.DataFrame,
+        ytr: np.ndarray,
+        Xva: pd.DataFrame,
+        yva: np.ndarray,
+        Xte: pd.DataFrame,
+    ) -> tuple[np.ndarray, np.ndarray, int]:
+        tr_l, va_l, te_l = compute_nested_linkage_features(Xtr, ytr, Xva, Xte)
+        val_pred, test_pred, best_iter = base_fit_predict(tr_l, ytr, va_l, yva, te_l)
+        imp = getattr(base_fit_predict, "last_feature_importances_", None)
+        if imp is not None:
+            fit_predict.last_feature_importances_ = imp  # type: ignore[attr-defined]
+            fit_predict.last_feature_names_ = list(tr_l.columns)  # type: ignore[attr-defined]
         return val_pred, test_pred, best_iter
 
     return fit_predict

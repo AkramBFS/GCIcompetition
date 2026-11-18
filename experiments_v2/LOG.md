@@ -39,3 +39,28 @@
 - **v1 `blend_final` OOF Evaluated on `folds_group.npy` (stored `experiments/blend_final/oof.npy`):**
   - On `experiments/folds.npy`: `[0.762728, 0.766599, 0.770005, 0.761713, 0.764984]`, mean `0.765206`, pooled `0.765177`.
   - On `experiments_v2/folds_group.npy`: `[0.765393, 0.774380, 0.760458, 0.765747, 0.759917]`, mean **`0.765179`**, pooled **`0.765177`**.
+
+## Phase P3: Feature Discovery (`folds_group.npy`, `EXP_LR = 0.06`, Keep Rule: `mean >= +0.0002` AND `>= 4/5` folds)
+- **Start UTC:** `2026-11-18T12:05:10Z` (**~36.91 h** left)
+- **Starting Incumbent:** `lgb2_inc` (`["F2", "F5_LOO", "F6"]`, `44` base cols + `2` TE cols, mean fold AUC `0.761828`)
+
+### A0 (`region_cat`: `REGION_POPULATION_RELATIVE` 81 unique values)
+- **Hypothesis (`lgb2_a0a_regcat`):** Adding `REGION_ID = round(REGION_POPULATION_RELATIVE, 6)` as a LightGBM categorical with `cat_smooth=20` captures discrete regional default risk better than numeric splits alone. Expected: `+0.0002` to `+0.0008` mean AUC.
+- **Hypothesis (`lgb2_a0b_regte`):** Adding nested smoothed target encoding `TE_REGION_ID` (`alpha=50`, `min_count=30`) provides a smoothed numeric regional default prior without categorical tree overfitting. Expected: `+0.0002` to `+0.0008` mean AUC.
+- **Hypothesis (`lgb2_a0c_regboth`):** Adding both `REGION_ID` (`cat_smooth=20`) and `TE_REGION_ID` combines discrete splits and smoothed prior. Expected: `+0.0002` to `+0.0008` mean AUC.
+- **Result (`lgb2_a0b_regte`, 44 cols, vs `lgb2_inc`):**
+  - Fold AUCs: `[0.761275, 0.770004, 0.756885, 0.760993, 0.758265]` | Mean: **`0.761484`** | Pooled: `0.761445`
+  - Delta vs `lgb2_inc`: **`-0.000344`** | Folds improved: `2/5` -> **`REJECT`** (TE_REGION_ID only)
+- **Result (`lgb2_a0a_regcat`, 45 cols, vs `lgb2_inc`):**
+  - Fold AUCs: `[0.759861, 0.769997, 0.753610, 0.760561, 0.757687]` | Mean: **`0.760343`** | Pooled: `0.760276`
+  - Delta vs `lgb2_inc`: **`-0.001485`** | Folds improved: `1/5` -> **`REJECT`** (REGION_ID cat + cat_smooth=20)
+- **Result (`lgb2_a0c_regboth`, 45 cols, vs `lgb2_inc`):**
+  - Fold AUCs: `[0.760783, 0.769963, 0.754065, 0.760585, 0.756429]` | Mean: **`0.760365`** | Pooled: `0.760302`
+  - Delta vs `lgb2_inc`: **`-0.001463`** | Folds improved: `0/5` -> **`REJECT`** (Both REGION_ID cat & TE)
+- **A0 Verdict:** All 3 variants rejected; incumbent stays `lgb2_inc`.
+
+### A0b (`lgb_codes`: ordinal integer categorical codes)
+- **Hypothesis (`lgb2_a0b_codes`):** Representing all categorical columns as ordinal integer codes (`NaN -> -1`) may reduce high-cardinality overfitting on `ORGANIZATION_TYPE`/`OCCUPATION_TYPE` (as observed in XGBoost v1). Expected: `-0.0005` to `+0.0005`.
+- **Result (`lgb2_a0b_codes`, 44 cols, vs `lgb2_inc`):**
+  - Fold AUCs: `[0.762555, 0.771595, 0.756114, 0.763139, 0.757934]` | Mean: **`0.762267`** | Pooled: `0.762141`
+  - Delta vs `lgb2_inc`: **`+0.000439`** | Folds improved: `4/5` -> **`KEEP`**

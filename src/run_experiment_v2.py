@@ -138,18 +138,23 @@ def main() -> None:
         fp = mlp_model(params=extra_params, seed=args.seed)
 
     # Optional nested wrappers (innermost executed closest to model, outermost produces features first)
-    if use_f6 or args.te_cols:
-        te_cols_list: list[str] = ["ORGANIZATION_TYPE", "OCCUPATION_TYPE"] if use_f6 else []
-        if args.te_cols:
-            for c in args.te_cols.split(","):
-                c = c.strip()
-                if c and c not in te_cols_list:
-                    te_cols_list.append(c)
+    if args.te_cols:
+        extra_te_cols = tuple(c.strip() for c in args.te_cols.split(",") if c.strip())
+        if extra_te_cols:
+            fp = wrap_fit_predict_with_te(
+                fp,
+                cols=extra_te_cols,
+                alpha=50.0,
+                min_count=args.te_min_count,
+                seed=args.seed,
+            )
+
+    if use_f6:
         fp = wrap_fit_predict_with_te(
             fp,
-            cols=tuple(te_cols_list),
+            cols=("ORGANIZATION_TYPE", "OCCUPATION_TYPE"),
             alpha=50.0,
-            min_count=args.te_min_count,
+            min_count=0,
             seed=args.seed,
         )
 
@@ -162,7 +167,7 @@ def main() -> None:
     if args.use_linkage or ("B1" in families):
         from src.features import wrap_fit_predict_with_linkage
 
-        fp = wrap_fit_predict_with_linkage(fp, train_df=train, test_df=test)
+        fp = wrap_fit_predict_with_linkage(fp)
 
     run_cv_v2(
         name=args.name,

@@ -18,6 +18,7 @@ def lgb_model(
     seed: int = SEED,
     lr: float | None = None,
     deterministic: bool = False,
+    use_codes: bool = False,
 ) -> Callable[
     [pd.DataFrame, np.ndarray, pd.DataFrame, np.ndarray, pd.DataFrame],
     tuple[np.ndarray, np.ndarray, int],
@@ -40,6 +41,15 @@ def lgb_model(
 
     stopping_rounds = int(cfg.pop("early_stopping_rounds", 200))
 
+    def _prep_codes(df: pd.DataFrame) -> pd.DataFrame:
+        if not use_codes:
+            return df
+        out = df.copy()
+        for col in out.columns:
+            if isinstance(out[col].dtype, pd.CategoricalDtype):
+                out[col] = out[col].cat.codes.astype(np.float32)
+        return out
+
     def fit_predict(
         Xtr: pd.DataFrame,
         ytr: np.ndarray,
@@ -47,11 +57,14 @@ def lgb_model(
         yva: np.ndarray,
         Xte: pd.DataFrame,
     ) -> tuple[np.ndarray, np.ndarray, int]:
+        tr_df = _prep_codes(Xtr)
+        va_df = _prep_codes(Xva)
+        te_df = _prep_codes(Xte)
         model = lgb.LGBMClassifier(**cfg)
         model.fit(
-            Xtr,
+            tr_df,
             ytr,
-            eval_X=Xva,
+            eval_X=va_df,
             eval_y=yva,
             eval_metric="auc",
             callbacks=[
@@ -60,8 +73,8 @@ def lgb_model(
             ],
         )
         best_iter = int(model.best_iteration_ or cfg.get("n_estimators", 5000))
-        val_pred = model.predict_proba(Xva, num_iteration=best_iter)[:, 1]
-        test_pred = model.predict_proba(Xte, num_iteration=best_iter)[:, 1]
+        val_pred = model.predict_proba(va_df, num_iteration=best_iter)[:, 1]
+        test_pred = model.predict_proba(te_df, num_iteration=best_iter)[:, 1]
         fit_predict.last_feature_importances_ = model.booster_.feature_importance(  # type: ignore[attr-defined]
             importance_type="gain"
         )
