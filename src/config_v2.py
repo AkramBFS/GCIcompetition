@@ -114,7 +114,19 @@ XGB_FINAL_SEEDS = [42, 1024]
 CAT_FINAL_SEEDS = [42, 1024]
 MLP_FINAL_SEEDS = [42, 1024]
 
-# Frozen feature views (populated at P4 gate)
-VIEW_A_FAMILIES: list[str] = ["F2", "F5_LOO", "F6"]
-VIEW_B_FAMILIES: list[str] = ["F0", "F1", "F2", "F3", "F4_LITE", "F5_LOO", "F6"]
-VIEW_C_FAMILIES: list[str] = ["F2", "F5_LOO", "F6"]
+# Frozen feature views (populated at P4 gate / freeze-features-v2)
+VIEW_A_FAMILIES: list[str] = ["F2", "F5_LOO", "F6", "A1", "A6_INT"]
+VIEW_B_FAMILIES: list[str] = ["F0", "F1", "F2", "F3", "F5_LOO", "F6", "A1", "A5", "A6_INT"]
+VIEW_C_FAMILIES: list[str] = ["F2", "F5_LOO", "F6", "A1", "A6_INT"]
+VIEW_USE_CODES: bool = True
+VIEW_C_TE_COLS: tuple[str, ...] = (
+    "OCC_X_ORG",
+    "EDU_X_INC",
+    "CON_X_GEN_X_FAM",
+    "REGION_ID",
+    "PRODUCT_CODE",
+    "TERM_X_CON",
+)
+VIEW_C_TE_MIN_COUNT: int = 30
+VIEW_C_KNN_KS: tuple[int, ...] = (500,)
+VIEW_C_KNN_MODE: str = "v2"

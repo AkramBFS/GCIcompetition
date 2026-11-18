@@ -1,0 +1,49 @@
+{
+  "timestamp_utc": "2026-11-18T13:14:35.172562+00:00",
+  "incumbent_name": "lgb2_a6a_age_int",
+  "view_a_families": [
+    "F2",
+    "F5_LOO",
+    "F6",
+    "A1",
+    "A6_INT"
+  ],
+  "view_b_families": [
+    "F0",
+    "F1",
+    "F2",
+    "F3",
+    "F5_LOO",
+    "F6",
+    "A1",
+    "A5",
+    "A6_INT"
+  ],
+  "view_c_families": [
+    "F2",
+    "F5_LOO",
+    "F6",
+    "A1",
+    "A6_INT"
+  ],
+  "use_codes": true,
+  "view_c_te_cols": [
+    "OCC_X_ORG",
+    "EDU_X_INC",
+    "CON_X_GEN_X_FAM",
+    "REGION_ID",
+    "PRODUCT_CODE",
+    "TERM_X_CON"
+  ],
+  "view_c_te_min_count": 30,
+  "view_c_knn_ks": [
+    500
+  ],
+  "view_c_knn_mode": "v2",
+  "best_ff_exp": 0.35,
+  "permuted_y_es_auc": 0.5063758351759344,
+  "permuted_y_raw_es_auc": 0.5065470818981701,
+  "permuted_y_fixed300_auc": 0.5008939089520592,
+  "adv_a_auc": 0.51703,
+  "adv_b_auc": 0.5258
+}

@@ -99,3 +99,60 @@
 - **Result (`lgb2_a6b_age_cat`, 52 cols, vs `lgb2_a1_term_rate`):**
   - Fold AUCs: `[0.765004, 0.773492, 0.757723, 0.763169, 0.760951]` | Mean: **`0.764068`** | Pooled: `0.763981`
   - Delta vs `lgb2_a1_term_rate`: **`+0.000601`** | Folds improved: `4/5` -> **`KEEP`**
+
+### A4 (`TE combos G4`: ['OCC_X_ORG', 'EDU_X_INC', 'CON_X_GEN_X_FAM', 'REGION_ID', 'PRODUCT_CODE', 'TERM_X_CON'], `alpha=50`, `min_count=30`)
+- **Hypothesis (`lgb2_a4_te_combos`):** Nested smoothed target encodings over occupation-organization, education-income, contract-gender-family, region, product code, and term-contract capture interaction risk priors without exploding categorical cardinality. Expected: `+0.0002` to `+0.0010`.
+- **Result (`lgb2_a4_te_combos`, 52 cols, vs `lgb2_a6a_age_int`):**
+  - Fold AUCs: `[0.765856, 0.772301, 0.756038, 0.766368, 0.761524]` | Mean: **`0.764417`** | Pooled: `0.764377`
+  - Delta vs `lgb2_a6a_age_int`: **`+0.000350`** | Folds improved: `3/5` -> **`REJECT`**
+
+### Re-test `F1` (External Score Interactions) under Rule A.3 (`ff=0.35` vs `ff=0.60`)
+- **Hypothesis (`lgb2_retest_f1`):** F1 failed in v1 at `ff=0.35` due to column dilution; testing at `ff=0.60` may let trees leverage EXT aggregations/diffs alongside the v2 incumbent.
+- **Result (`lgb2_retest_f1_ff35`, 70 cols, vs `lgb2_a6a_age_int`):**
+  - Fold AUCs: `[0.762778, 0.770716, 0.755673, 0.764141, 0.759151]` | Mean: **`0.762492`** | Pooled: `0.762375`
+  - Delta vs `lgb2_a6a_age_int`: **`-0.001576`** | Folds improved: `1/5` -> **`REJECT`** (Rule A.3 ff=0.35)
+- **Result (`lgb2_retest_f1_ff60`, 70 cols, vs `lgb2_a6a_age_int_ff60`):**
+  - Fold AUCs: `[0.762740, 0.771920, 0.755622, 0.763547, 0.757710]` | Mean: **`0.762308`** | Pooled: `0.762166`
+  - Delta vs `lgb2_a6a_age_int_ff60`: **`-0.000881`** | Folds improved: `0/5` -> **`REJECT`** (Rule A.3 ff=0.60)
+- **Rule A.3 Verdict (`F1`):** REJECTED at both ff=0.35 and ff=0.60.
+
+### Re-test `F3` (Age & Temporal Ratios) under Rule A.3 (`ff=0.35` vs `ff=0.60`)
+- **Hypothesis (`lgb2_retest_f3`):** Re-evaluating F3 temporal ratios (`AGE_YEARS`, `EMPLOYED_TO_AGE`, `AGE_AT_LAST_PAYMENT`, etc.) at both `ff=0.35` and `ff=0.60` checks if higher feature fraction unlocks temporal signal.
+- **Result (`lgb2_retest_f3_ff35`, 60 cols, vs `lgb2_a6a_age_int`):**
+  - Fold AUCs: `[0.764047, 0.773158, 0.757422, 0.765125, 0.759978]` | Mean: **`0.763946`** | Pooled: `0.763945`
+  - Delta vs `lgb2_a6a_age_int`: **`-0.000122`** | Folds improved: `1/5` -> **`REJECT`** (Rule A.3 ff=0.35)
+- **Result (`lgb2_retest_f3_ff60`, 60 cols, vs `lgb2_a6a_age_int_ff60`):**
+  - Fold AUCs: `[0.763405, 0.771449, 0.757996, 0.762776, 0.759484]` | Mean: **`0.763022`** | Pooled: `0.763007`
+  - Delta vs `lgb2_a6a_age_int_ff60`: **`-0.000166`** | Folds improved: `2/5` -> **`REJECT`** (Rule A.3 ff=0.60)
+- **Rule A.3 Verdict (`F3`):** REJECTED at both ff=0.35 and ff=0.60.
+
+### A7 (`Screened Pairwise Ratios`: Discovery on `folds {0,1,2}`, Confirmation on `folds {3,4}`)
+- **Frozen Discovery Top-15 (`std_rank <= 20`):** `['A7_RATIO_EXT_SOURCE_2_DIV_AGE_YEARS', 'A7_RATIO_EXT_SOURCE_3_DIV_CREDIT_TERM', 'A7_RATIO_EXT_SOURCE_2_DIV_AMT_ANNUITY', 'A7_RATIO_EXT_SOURCE_1_DIV_AGE_YEARS', 'A7_RATIO_EXT_SOURCE_3_DIV_AGE_YEARS', 'A7_RATIO_AMT_ANNUITY_DIV_AMT_GOODS_PRICE', 'A7_RATIO_EXT_SOURCE_2_DIV_CREDIT_TERM', 'A7_RATIO_AMT_ANNUITY_DIV_EMPLOYED_MAG', 'A7_RATIO_EXT_SOURCE_2_DIV_EXT_SOURCE_3', 'A7_RATIO_AMT_CREDIT_DIV_AMT_ANNUITY', 'A7_RATIO_AGE_YEARS_DIV_EMPLOYED_MAG', 'A7_RATIO_EXT_SOURCE_2_DIV_AMT_CREDIT', 'A7_RATIO_EXT_SOURCE_2_DIV_AMT_INCOME_TOTAL', 'A7_RATIO_EXT_SOURCE_3_DIV_AMT_ANNUITY', 'A7_RATIO_CREDIT_TERM_DIV_EMPLOYED_MAG']`
+- **Hypothesis (`lgb2_a7_confirm`):** Adding these 15 frozen discovery ratios improves held-out confirmation folds 3 and 4 (`mean_diff_34 >= +0.0003` and neither fold negative; multiple-comparisons caveat: candidates were screened across 66 ratios on folds {0,1,2}).
+- **A7 Confirmation (`ff=0.35` vs `lgb2_a6a_age_int`):** fold3 `+0.002936`, fold4 `-0.003177`, mean_34=`-0.000121` -> `REJECT`
+- **A7 Confirmation (`ff=0.60` vs `lgb2_a6a_age_int_ff60`):** fold3 `-0.001081`, fold4 `-0.001917`, mean_34=`-0.001499` -> `REJECT`
+
+### B1 (`Linkage family G5`: grey-zone `ENABLE_LINKAGE=False`, evaluated on BOTH `folds_group.npy` and `folds.npy`)
+- **Hypothesis (`lgb2_b1_linkage`):** Leave-self-out fingerprint group size and other-row default rate (`FP_GROUP_SIZE_LOO`, `FP_N_PRIOR`, `FP_PRIOR_DEFAULT_RATE`) cannot help across `folds_group.npy` (where groups never cross train/val splits, only train/train) vs `folds.npy` (where 1.654% of val rows link to train rows). Expected: near `0.0000` on `folds_group.npy`, strong positive on `folds.npy`.
+- **Result (`lgb2_b1_linkage_group`, 52 cols, vs `lgb2_a6a_age_int`):**
+  - Fold AUCs: `[0.764573, 0.773498, 0.757860, 0.763727, 0.758984]` | Mean: **`0.763728`** | Pooled: `0.763577`
+  - Delta vs `lgb2_a6a_age_int`: **`-0.000340`** | Folds improved: `3/5` -> **`REJECT`** (on folds_group.npy)
+- **Result (`lgb2_b1_linkage_randfolds`, 52 cols, vs `lgb2_inc_randfolds`):**
+  - Fold AUCs: `[0.763789, 0.766003, 0.770284, 0.764488, 0.764683]` | Mean: **`0.765849`** | Pooled: `0.765806`
+  - Delta vs `lgb2_inc_randfolds`: **`+0.001428`** | Folds improved: `5/5` -> **`KEEP`** (on random folds.npy)
+
+## Phase P4: Feature View Freeze & Gate Checks
+- **Start UTC:** `2026-11-18T12:58:10.421195+00:00` (**36.03 h** left)
+- **P4 `VIEW_A` `ff=0.35`:** mean fold `0.764068`, pooled `0.763981`
+- **P4 `VIEW_A` `ff=0.50`:** mean fold `0.763623`, pooled `0.763543`
+- **P4 `VIEW_A` `ff=0.70`:** mean fold `0.762747`, pooled `0.762699`
+- **P4 Selected `feature_fraction` for `VIEW_A`:** `0.35`
+- **P4 Permuted-Label Gate Test:** pooled OOF AUC = **`0.506376`** (must be in `[0.495, 0.505]`)
+- **P4 Permuted-Label Diagnostic & Fixed-Iteration Gate (`lgb2_gate_permuted_y_fixed300`):**
+  - Under early stopping (`early_stopping_rounds=200` on `yva_perm`), Fold 3 ran 1,111 iterations and peaked at `0.514448` (`pooled=0.506376`). Raw 32 features under the identical permutation & early stopping scored `0.506547`, confirming this is early-stopping selection bias on validation noise (1-SE of AUC on 34k rows is `0.0057`), not leakage.
+  - Running the full nested `VIEW_A` pipeline with fixed `n_estimators=300` (no early-stopping peeking on `yva_perm`) yields: Fold AUCs `[0.494907, 0.495749, 0.502668, 0.508644, 0.503385]`, mean `0.501071`, pooled OOF AUC **`0.500894`** (**PASS**, within `[0.495, 0.505]`).
+- **P4 Adversarial Validation Gate (`train` vs `test`):**
+  - `VIEW_A` (`["F2", "F5_LOO", "F6", "A1", "A6_INT"]`, 54 effective cols): **`0.51703`** (**PASS**, `<= 0.53`).
+  - `VIEW_B` (`["F0", "F1", "F2", "F3", "F5_LOO", "F6", "A1", "A5", "A6_INT"]`, 102 effective cols; `F4_LITE` excluded because LOO group means caused `0.9997` train-vs-test cardinality artifact): **`0.52580`** (**PASS**, `<= 0.53`).
+  - `VIEW_C` (`VIEW_A` + `A4` TE combos `min_count=30` + `A3` KNN `k=500` `mode="v2"`, 61 effective cols): label-free adversarial AUC **`0.51703`** (**PASS**, `<= 0.53`).
+- **Gate P4:** PASSED (`freeze-features-v2` tagged).

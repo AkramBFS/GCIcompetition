@@ -1,0 +1,113 @@
+{
+  "selected": [
+    "A7_RATIO_EXT_SOURCE_2_DIV_AGE_YEARS",
+    "A7_RATIO_EXT_SOURCE_3_DIV_CREDIT_TERM",
+    "A7_RATIO_EXT_SOURCE_2_DIV_AMT_ANNUITY",
+    "A7_RATIO_EXT_SOURCE_1_DIV_AGE_YEARS",
+    "A7_RATIO_EXT_SOURCE_3_DIV_AGE_YEARS",
+    "A7_RATIO_AMT_ANNUITY_DIV_AMT_GOODS_PRICE",
+    "A7_RATIO_EXT_SOURCE_2_DIV_CREDIT_TERM",
+    "A7_RATIO_AMT_ANNUITY_DIV_EMPLOYED_MAG",
+    "A7_RATIO_EXT_SOURCE_2_DIV_EXT_SOURCE_3",
+    "A7_RATIO_AMT_CREDIT_DIV_AMT_ANNUITY",
+    "A7_RATIO_AGE_YEARS_DIV_EMPLOYED_MAG",
+    "A7_RATIO_EXT_SOURCE_2_DIV_AMT_CREDIT",
+    "A7_RATIO_EXT_SOURCE_2_DIV_AMT_INCOME_TOTAL",
+    "A7_RATIO_EXT_SOURCE_3_DIV_AMT_ANNUITY",
+    "A7_RATIO_CREDIT_TERM_DIV_EMPLOYED_MAG"
+  ],
+  "rule_used": "std_rank <= 20",
+  "discovery_mean_fold_auc": 0.7585968936802256,
+  "details": [
+    {
+      "feature": "A7_RATIO_EXT_SOURCE_2_DIV_AGE_YEARS",
+      "mean_rank": 3.0,
+      "std_rank": 0.0,
+      "mean_gain": 3152.012410958608
+    },
+    {
+      "feature": "A7_RATIO_EXT_SOURCE_3_DIV_CREDIT_TERM",
+      "mean_rank": 4.0,
+      "std_rank": 0.0,
+      "mean_gain": 2429.8733363548913
+    },
+    {
+      "feature": "A7_RATIO_EXT_SOURCE_2_DIV_AMT_ANNUITY",
+      "mean_rank": 5.0,
+      "std_rank": 0.0,
+      "mean_gain": 2239.1727620363235
+    },
+    {
+      "feature": "A7_RATIO_EXT_SOURCE_1_DIV_AGE_YEARS",
+      "mean_rank": 7.333333333333333,
+      "std_rank": 1.5275252316519465,
+      "mean_gain": 1644.6191166639328
+    },
+    {
+      "feature": "A7_RATIO_EXT_SOURCE_3_DIV_AGE_YEARS",
+      "mean_rank": 9.666666666666666,
+      "std_rank": 2.0816659994661326,
+      "mean_gain": 1407.6812973817189
+    },
+    {
+      "feature": "A7_RATIO_AMT_ANNUITY_DIV_AMT_GOODS_PRICE",
+      "mean_rank": 10.0,
+      "std_rank": 0.0,
+      "mean_gain": 1343.3063737551372
+    },
+    {
+      "feature": "A7_RATIO_EXT_SOURCE_2_DIV_CREDIT_TERM",
+      "mean_rank": 10.333333333333334,
+      "std_rank": 4.932882862316248,
+      "mean_gain": 1321.130216260751
+    },
+    {
+      "feature": "A7_RATIO_AMT_ANNUITY_DIV_EMPLOYED_MAG",
+      "mean_rank": 11.666666666666666,
+      "std_rank": 1.1547005383792517,
+      "mean_gain": 1153.7381935516994
+    },
+    {
+      "feature": "A7_RATIO_EXT_SOURCE_2_DIV_EXT_SOURCE_3",
+      "mean_rank": 14.333333333333334,
+      "std_rank": 2.5166114784235836,
+      "mean_gain": 1005.8551648457845
+    },
+    {
+      "feature": "A7_RATIO_AMT_CREDIT_DIV_AMT_ANNUITY",
+      "mean_rank": 16.333333333333332,
+      "std_rank": 2.081665999466133,
+      "mean_gain": 934.9795578618845
+    },
+    {
+      "feature": "A7_RATIO_AGE_YEARS_DIV_EMPLOYED_MAG",
+      "mean_rank": 20.0,
+      "std_rank": 1.0,
+      "mean_gain": 866.2616304953893
+    },
+    {
+      "feature": "A7_RATIO_EXT_SOURCE_2_DIV_AMT_CREDIT",
+      "mean_rank": 30.666666666666668,
+      "std_rank": 4.725815626252608,
+      "mean_gain": 625.9722100098928
+    },
+    {
+      "feature": "A7_RATIO_EXT_SOURCE_2_DIV_AMT_INCOME_TOTAL",
+      "mean_rank": 31.666666666666668,
+      "std_rank": 8.082903768654761,
+      "mean_gain": 567.89532995224
+    },
+    {
+      "feature": "A7_RATIO_EXT_SOURCE_3_DIV_AMT_ANNUITY",
+      "mean_rank": 32.333333333333336,
+      "std_rank": 6.8068592855540455,
+      "mean_gain": 588.8711705207825
+    },
+    {
+      "feature": "A7_RATIO_CREDIT_TERM_DIV_EMPLOYED_MAG",
+      "mean_rank": 41.0,
+      "std_rank": 7.810249675906654,
+      "mean_gain": 447.00476336479187
+    }
+  ]
+}
