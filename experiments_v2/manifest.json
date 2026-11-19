@@ -37,6 +37,8 @@
     "sample_submission.csv": "6e5ad587b7c0b3d9fa39c90ce03e161ff5ef292193e117a6a02b11075dffe7db"
   },
   "code_hash": "94fca906638e99e1a5a0922527c7bc4bf598e30ceaf6b8069aff6722fb40f352",
+  "submission_sha256": "51e1cac2e1ba739496f3a5a6d0fe52b05ef352dbeca1dc3763ddf3e376831f96",
+  "expected_fast_sha256": "60bd178560f83dd5589dfb53658237ac0fc12a580fae13b5bb807c48e9060780",
   "final_blend_description": "Equal-weight fold-isolated rank blend across 10 model-view groups (20 models)",
   "pool_groups": {
     "LGB_VIEW_A": 3,

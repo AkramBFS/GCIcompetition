@@ -16,7 +16,9 @@ INCLUDE_ROOT_FILES = [
     "requirements_lock_windows.txt",
     "make_zip.py",
     "make_zip_v2.py",
+    "solution_v2.ipynb",
     "tutorial.ipynb",
+    "input/README.txt",
 ]
 
 INCLUDE_V1_EXP_FILES = {
@@ -93,9 +95,19 @@ def build_zip_v2(output_path: Path = ZIP_PATH) -> Path:
             for p in sorted(sub_dir.glob("*.json")):
                 files_to_pack.append(p)
 
+    shipped_csv = ROOT / "submissions_v2" / "sub_final_v2.csv"
+    if shipped_csv.exists():
+        files_to_pack.append(shipped_csv)
+
     with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for fp in files_to_pack:
             arcname = fp.relative_to(ROOT).as_posix()
+            if (
+                arcname.endswith(".csv")
+                and arcname.startswith(("submissions/", "submissions_v2/", "input/", "output/"))
+                and arcname != "submissions_v2/sub_final_v2.csv"
+            ):
+                raise AssertionError(f"Forbidden CSV in zip: {arcname}")
             zf.write(fp, arcname=arcname)
 
     size_kb = output_path.stat().st_size / 1024.0

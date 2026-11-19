@@ -314,13 +314,14 @@ def test_determinism_and_schema_v2() -> None:
 
 
 def test_reproduction_check_v2() -> None:
-    """Verify run_all_v2.py output matches blend_final_v2 and sub_01_blend_v2.csv."""
+    """Verify run_all_v2.py output matches full blend/manifest or clean-room fast baseline."""
     from scipy.stats import spearmanr
 
     sub_final_v2 = SUB_DIR / "sub_final_v2.csv"
     manifest_path = EXP_DIR / "manifest.json"
     blend_sub = SUB_DIR / "sub_01_blend_v2.csv"
     blend_meta_path = EXP_DIR / "blend_final_v2" / "meta.json"
+    fast_ref_path = EXP_DIR / "p7_fast_determinism.json"
 
     if not sub_final_v2.exists() or not manifest_path.exists():
         pytest.skip("v2 final submission/manifest not built yet (run src/run_all_v2.py first)")
@@ -334,9 +335,17 @@ def test_reproduction_check_v2() -> None:
     assert ((df_final["TARGET"] >= 0.0) & (df_final["TARGET"] <= 1.0)).all()
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    blend_meta = json.loads(blend_meta_path.read_text(encoding="utf-8"))
-    assert abs(float(manifest["pooled_oof_auc"]) - float(blend_meta["pooled_oof_auc"])) <= 1e-4
-
-    df_blend = pd.read_csv(blend_sub)
-    corr = float(spearmanr(df_final["TARGET"], df_blend["TARGET"]).statistic)
-    assert corr >= 0.9999
+    if manifest.get("mode") == "fast":
+        if not fast_ref_path.exists():
+            pytest.skip("p7_fast_determinism.json missing; skipping --fast AUC cross-check")
+        fast_ref = json.loads(fast_ref_path.read_text(encoding="utf-8"))
+        assert abs(float(manifest["pooled_oof_auc"]) - float(fast_ref["fast1_pooled_oof_auc"])) <= 1e-4
+    else:
+        if not blend_meta_path.exists():
+            pytest.skip("blend_final_v2/meta.json missing; skipping --full AUC cross-check")
+        blend_meta = json.loads(blend_meta_path.read_text(encoding="utf-8"))
+        assert abs(float(manifest["pooled_oof_auc"]) - float(blend_meta["pooled_oof_auc"])) <= 1e-4
+        if blend_sub.exists():
+            df_blend = pd.read_csv(blend_sub)
+            corr = float(spearmanr(df_final["TARGET"], df_blend["TARGET"]).statistic)
+            assert corr >= 0.9999

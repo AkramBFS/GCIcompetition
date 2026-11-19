@@ -2,9 +2,31 @@
 
 End-to-end, leak-free, reproducible tabular machine learning pipeline for the **GCI Global 2026 Home Credit Default Risk** competition.
 
+## How to reproduce
+
+> **Submitted Version:** **`v2`** ([`submissions_v2/sub_final_v2.csv`](submissions_v2/sub_final_v2.csv), `ENABLE_LINKAGE = False`) is the submitted competition solution (`0.766841` mean 5-fold group-CV AUC | `0.766777` pooled OOF AUC). All `v1` files (`src/run_all.py`, `src/config.py`, `experiments/`, `submissions/`, `requirements.txt`, Sections 1–7 below) and grey-zone linkage files (`ENABLE_LINKAGE = True` / `experiments_v2/blend_final_v2_linkage/`) are preserved for history only.
+
+- **Shipped Submission CSV:** `submissions_v2/sub_final_v2.csv`
+- **Shipped CSV SHA256:** `51e1cac2e1ba739496f3a5a6d0fe52b05ef352dbeca1dc3763ddf3e376831f96`
+- **Python & Dependencies:** Python `3.11.9` — install the 8 cross-platform direct packages via `pip install -r requirements_v2.txt` (no `torch` or Windows-only packages needed).
+- **Data Location:** Place `train.csv`, `test.csv`, and `sample_submission.csv` inside `input/` (see `input/README.txt`).
+- **Fast Verification (`--fast`):** Runs 4 LightGBM models (`VIEW_A` x3 + `VIEW_B` x1) in **~20–27 min** (`1,218.1s` in a clean minimal venv), achieving **`0.765773` pooled OOF AUC** (`0.765830` mean fold AUC, bit-identical SHA256 `60bd178560f83dd5589dfb53658237ac0fc12a580fae13b5bb807c48e9060780`):
+  ```bash
+  PYTHONHASHSEED=42 python src/run_all_v2.py --fast --fresh
+  ```
+  Or execute [`solution_v2.ipynb`](solution_v2.ipynb) cell-by-cell (`--fast` default with `--full` commented).
+- **Full End-to-End Reproduction (`--full`):** Runs all 20 models across 10 model-view groups from scratch in **~4.2 h** (`14,983.5s` uncached on 2 physical / 4 logical CPU cores), reproducing **`0.766777` pooled OOF AUC** (`0.766841` mean fold AUC) and exact SHA256 `51e1cac2e1ba739496f3a5a6d0fe52b05ef352dbeca1dc3763ddf3e376831f96`:
+  ```bash
+  PYTHONHASHSEED=42 python src/run_all_v2.py --full --fresh
+  ```
+- **Seeds Used:** Global & hash seed `42`; `StratifiedGroupKFold` (5-fold & 10-fold) `42`; LightGBM `[42, 1024, 2025]` (+ 10-fold `42`); XGBoost `[42, 1024]`; CatBoost `VIEW_A` `[42, 1024]` & `VIEW_B`/`VIEW_C` `42`; nested TE/KNN matching model seed; `honest_blend_cv` `42`.
+- **Automated Tests:** `pytest tests/test_pipeline.py tests/test_pipeline_v2.py -v`
+
+---
+
 - **Metric:** ROC-AUC (`sklearn.metrics.roc_auc_score`)
 - **Dataset:** `input/train.csv` (`171,202` rows x `34` columns, `8.0729%` positive `TARGET`), `input/test.csv` (`61,500` rows x `33` columns)
-- **Final Multi-Seed Rank Blend CV:** **`0.765206`** mean 5-fold AUC | **`0.765177`** pooled OOF AUC (vs tutorial LightGBM `0.7443` / tutorial 4-model blend `0.7531` on 70/30 holdout)
+- **v1 Historical Blend CV:** `0.765206` mean 5-fold random-CV AUC | `0.765177` pooled OOF AUC (Omnicampus public `0.76876`; vs tutorial LightGBM `0.7443` / tutorial 4-model blend `0.7531` on 70/30 holdout)
 
 ---
 
@@ -239,6 +261,5 @@ For a sub-hour single-CatBoost-seed verification run (`~35-45 min`):
 **Idea Sources & Official Documentation Credited:**
 - **Kaggle Home Credit Default Risk 1st-Place Team Post-Mortem Write-Up (Ideas Only):** Curated feature-view restriction against noisy collinear features, implied loan annuity interest rates (`RATE_PER_PERIOD` / `COST_PROXY`), pattern-isolated KNN target-mean features over normalized external credit scores, empirical observation of neural-network vs GBDT performance gaps on tabular missingness patterns, and conservative expectations for linear/tree stacking gains over rank blends.
 - **Public Kaggle Home Credit Default Risk Write-Ups (Ideas Only):** External-score interaction ratios/products, rounded credit-term annuity contract peaks (`TERM_MODE`), and nested out-of-fold smoothed target encoding.
-- **Public GCI Competition Repository README Approach (Ideas Only):** Structured single-hypothesis experiment logging (`LOG.md` + `tracker.csv`), fixed-fold paired CV comparator (`compare_v2`), adversarial validation gates, and one-command deterministic packaging.
 - **Official Course Materials (GCI Global 2026, Matsuo-Iwasawa Lab, University of Tokyo):** `README.ipynb`, `tutorial.ipynb`, and `gci_competition_master_context_guideline.md` (competition rules, schema, and known raw data anomaly `DAYS_EMPLOYED = 365243`).
 - **Official Library Documentation:** LightGBM (`https://lightgbm.readthedocs.io/`), XGBoost (`https://xgboost.readthedocs.io/`), CatBoost (`https://catboost.ai/en/docs/`), scikit-learn (`https://scikit-learn.org/`), SciPy (`https://docs.scipy.org/`), NumPy (`https://numpy.org/doc/`), pandas (`https://pandas.pydata.org/docs/`), Optuna (`https://optuna.readthedocs.io/`), and PyTorch (`https://pytorch.org/docs/`).
