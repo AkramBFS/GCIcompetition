@@ -1,0 +1,25 @@
+{
+  "submission_file": "sub_final_v2_linkage.csv",
+  "timestamp_utc": "2026-11-18T19:59:50.243187+00:00",
+  "git_hash": "7492549",
+  "n_rows": 61500,
+  "pred_min": 5.962059620596206e-05,
+  "pred_max": 0.9999891598915989,
+  "pred_mean": 0.5000081300813009,
+  "name": "blend_final_v2_linkage",
+  "enable_linkage": true,
+  "members": [
+    "lgb_v2_viewA_link_s42",
+    "xgb_v2_viewA_link_s42",
+    "cat_v2_viewA_link_s42"
+  ],
+  "pooled_oof_auc": 0.7657259338171258,
+  "fold_aucs": [
+    0.7660514413021181,
+    0.774377194185897,
+    0.7595479002034288,
+    0.7661466787897039,
+    0.7627998956534868
+  ],
+  "mean_fold_auc": 0.7657846220269269
+}

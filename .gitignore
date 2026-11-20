@@ -17,6 +17,28 @@ env/
 input/*.csv
 output/
 
+# Experiment & submission artifacts (keep tracker.csv, meta.json, LOG.md, folds.npy, docs)
+experiments/*/*.npy
+experiments/logs/
+experiments/run_all_cache*/
+experiments/*.db
+submissions/*.csv
+experiments_v2/*/*.npy
+experiments_v2/logs/
+experiments_v2/run_all_cache*/
+experiments_v2/knn_cache/
+experiments_v2/*.db
+submissions_v2/*.csv
+catboost_info/
+.pytest_cache/
+
+# Local untracked brief / archives / verification venv
+.venv*/
+tutorial.zip
+competition_code.zip
+competition_code_v2.zip
+Agent brief implement the GCI Home Credit plan in the repo.md
+
 # OS specific files
 .DS_Store
 Thumbs.db

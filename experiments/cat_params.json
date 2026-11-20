@@ -1,0 +1,5 @@
+{
+  "iterations": 4000,
+  "learning_rate": 0.04,
+  "early_stopping_rounds": 250
+}

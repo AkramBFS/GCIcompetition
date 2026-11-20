@@ -1,0 +1,14 @@
+{
+  "submission_file": "sub_01_lgb_raw.csv",
+  "timestamp_utc": "2026-11-17T20:02:36.729388+00:00",
+  "git_hash": "7c8ad00",
+  "n_rows": 61500,
+  "pred_min": 0.0019872063413644237,
+  "pred_max": 0.7920619685348074,
+  "pred_mean": 0.0884251706066242,
+  "experiments": [
+    "lgb_raw"
+  ],
+  "mean_fold_auc": 0.7513619887847154,
+  "pooled_oof_auc": 0.7513102836480515
+}

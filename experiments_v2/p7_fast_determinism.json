@@ -1,0 +1,9 @@
+{
+  "fast1_sha256": "60bd178560f83dd5589dfb53658237ac0fc12a580fae13b5bb807c48e9060780",
+  "fast2_sha256": "60bd178560f83dd5589dfb53658237ac0fc12a580fae13b5bb807c48e9060780",
+  "bit_identical": true,
+  "fast1_pooled_oof_auc": 0.7657727795060798,
+  "fast2_pooled_oof_auc": 0.7657727795060798,
+  "fast1_runtime_sec": 1530.83,
+  "fast2_runtime_sec": 1628.59
+}

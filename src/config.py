@@ -1,0 +1,87 @@
+"""Central configuration for the GCI Home Credit Default Risk pipeline."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+# Core paths
+ROOT = Path(__file__).resolve().parent.parent
+INPUT_DIR = ROOT / "input"
+EXP_DIR = ROOT / "experiments"
+LOG_DIR = EXP_DIR / "logs"
+SUB_DIR = ROOT / "submissions"
+OUTPUT_DIR = ROOT / "output"
+FOLDS_PATH = EXP_DIR / "folds.npy"
+TRACKER_PATH = EXP_DIR / "tracker.csv"
+
+# Reproducibility & learning rates
+SEED = 42
+EXP_LR = 0.06
+FINAL_LR = 0.02
+N_SPLITS = 5
+
+# Leave one logical core free when running heavy training jobs
+N_THREADS = max(1, (os.cpu_count() or 4) - 1)
+
+# Noise floor measured in P2 (abs(lgb_raw - lgb_raw_s7) mean fold AUC diff)
+NOISE_FLOOR = 0.000072
+MIN_GAIN = max(0.0002, NOISE_FLOOR)
+
+# Feature engineering switches (frozen at freeze-features-v1)
+ALL_FAMILIES = ["F0", "F1", "F2", "F3", "F4", "F5", "F6"]
+FROZEN_FAMILIES: list[str] = ["F2", "F5", "F6"]
+USE_TEST_FOR_STATS = False
+DROPPED_FEATURES: list[str] = ["FLAG_MOBIL"]
+
+# Tuned model configurations (populated in P5 / P8)
+LGB_TUNED_PARAMS: dict = {
+    "max_depth": 4,
+    "num_leaves": 15,
+    "min_data_in_leaf": 93,
+    "feature_fraction": 0.2416696493365781,
+    "bagging_fraction": 0.8439312348371466,
+    "lambda_l2": 2.2453924433747887,
+    "lambda_l1": 3.441802045844477,
+    "min_gain_to_split": 0.123735565793759,
+    "bagging_freq": 1,
+}
+XGB_USE_CODES: bool = True
+CATBOOST_AVAILABLE: bool = True
+
+FINAL_SEEDS = [42, 1024, 2025]
+CAT_FINAL_SEEDS = [42, 1024]
+XGB_FINAL_SEEDS = [42, 1024]
+
+CAT_FINAL_PARAMS: dict = {
+    "loss_function": "Logloss",
+    "eval_metric": "AUC",
+    "depth": 6,
+    "learning_rate": 0.04,
+    "l2_leaf_reg": 5.0,
+    "bootstrap_type": "Bernoulli",
+    "subsample": 0.8,
+    "iterations": 4000,
+    "early_stopping_rounds": 250,
+}
+
+XGB_FINAL_PARAMS: dict = {
+    "objective": "binary:logistic",
+    "eval_metric": "auc",
+    "tree_method": "hist",
+    "max_depth": 5,
+    "learning_rate": 0.03,
+    "subsample": 0.8,
+    "colsample_bytree": 0.5,
+    "min_child_weight": 20,
+    "reg_lambda": 10.0,
+    "n_estimators": 5000,
+    "early_stopping_rounds": 200,
+}
+
+# Equal-weight rank blend across the 3 model families (LGB 3 seeds, CatBoost 2 seeds, XGBoost 2 seeds)
+FINAL_BLEND_WEIGHTS: dict[str, float] = {
+    "lgb": 1.0 / 3.0,
+    "cat": 1.0 / 3.0,
+    "xgb": 1.0 / 3.0,
+}

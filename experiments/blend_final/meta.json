@@ -1,0 +1,35 @@
+{
+  "name": "blend_final",
+  "timestamp_utc": "2026-11-17T23:37:20.212018+00:00",
+  "n_rows": 171202,
+  "n_features": 46,
+  "components": [
+    "lgb_tuned_lr02",
+    "lgb_final_s1024",
+    "lgb_final_s2025",
+    "cat_frozen",
+    "cat_final_s1024",
+    "xgb_frozen_codes",
+    "xgb_final_s1024"
+  ],
+  "weights": [
+    0.1111111111111111,
+    0.1111111111111111,
+    0.1111111111111111,
+    0.16666666666666666,
+    0.16666666666666666,
+    0.16666666666666666,
+    0.16666666666666666
+  ],
+  "fold_aucs": [
+    0.7627281677702145,
+    0.7665990644268247,
+    0.7700048071450023,
+    0.761713177421007,
+    0.76498428775541
+  ],
+  "mean_fold_auc": 0.7652059009036917,
+  "std_fold_auc": 0.0029447511579010458,
+  "pooled_oof_auc": 0.7651770654752016,
+  "note": "P8 equal-family rank blend (LGB 3 seeds, CatBoost 2 seeds, XGBoost 2 seeds)"
+}

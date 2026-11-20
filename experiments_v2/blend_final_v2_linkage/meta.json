@@ -1,0 +1,18 @@
+{
+  "name": "blend_final_v2_linkage",
+  "enable_linkage": true,
+  "members": [
+    "lgb_v2_viewA_link_s42",
+    "xgb_v2_viewA_link_s42",
+    "cat_v2_viewA_link_s42"
+  ],
+  "pooled_oof_auc": 0.7657259338171258,
+  "fold_aucs": [
+    0.7660514413021181,
+    0.774377194185897,
+    0.7595479002034288,
+    0.7661466787897039,
+    0.7627998956534868
+  ],
+  "mean_fold_auc": 0.7657846220269269
+}
